@@ -8,7 +8,18 @@ A self-hosted engine that finds US B2B leads from three streams and keeps them i
 
 It runs locally or on a small VPS with SQLite, meters every paid API call, and stops at a monthly budget you set (default $50).
 
-**Status:** specification. See [`SPEC.md`](SPEC.md) for the build plan and [`docs/research.md`](docs/research.md) for the sources behind it.
+**Status:** Phase 0 (verify and scaffold). See [`SPEC.md`](SPEC.md) for the build plan, [`docs/providers.md`](docs/providers.md) for verified provider facts and [`docs/decisions.md`](docs/decisions.md) for the decision log.
+
+## Develop
+Requires Node 22.12+ and pnpm 10 (`corepack enable`).
+
+```sh
+pnpm install
+pnpm dev          # web 127.0.0.1:4500, engine 127.0.0.1:4501, collector 127.0.0.1:4511
+pnpm typecheck && pnpm lint && pnpm test
+pnpm db:migrate   # apply Drizzle migrations to data/le.db
+docker compose -f deploy/compose.yaml up --build
+```
 
 ## Licence
 [AGPL-3.0-only](LICENSE). If you run a modified version as a service, you must offer its source to your users.
