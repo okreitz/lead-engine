@@ -1,6 +1,6 @@
 # Research: sources, prices and reuse (November 2026)
 
-Collected on 2026-11-08 from vendor pages, GitHub search and web sources. **[unverified]** means the figure came from a third party or memory and must be checked in Phase 0 (`docs/providers.md`). Prices change; this file is a starting point, not a contract.
+Collected on 2026-11-08 from vendor pages, GitHub search and web sources. **[unverified]** means the figure came from a third party or memory. Phase 0 checked these against primary sources on 2026-11-08: **`docs/providers.md` is now the source of truth**, and each item below says what was resolved (**[verified]** / **[corrected]**) or is still **[unverified]**. Prices change; this file is a starting point, not a contract.
 
 ## Headline findings
 - No open-source project covers all three streams. Stream 3 has usable references; stream 2 has young ones; stream 1 has only demos.
@@ -13,25 +13,25 @@ Collected on 2026-11-08 from vendor pages, GitHub search and web sources. **[unv
 ### Free IP data
 | Source | Gives | Terms |
 |---|---|---|
-| IPinfo Lite | Country, ASN, AS name, AS domain (no company) | Free, unlimited API and download |
+| IPinfo Lite | Country, ASN, AS name, AS domain (no company) | Free, unlimited API and download, **but needs a free account token**; CC BY-SA 4.0, product use allowed with attribution **[corrected]** |
 | MaxMind GeoLite2 ASN | ASN and org | Free account, EULA, delete old copies within 30 days |
-| DB-IP Lite | Country / ASN | CC BY 4.0, monthly |
+| DB-IP Lite | Country / ASN | CC BY 4.0, monthly, no account **[verified]** |
 | iptoasn.com | IP range → ASN | Public domain, hourly |
 | [sapics/ip-location-db](https://github.com/sapics/ip-location-db) | Prebuilt ASN/geo databases | Mixed source licences |
 | RIPE/APNIC/LACNIC/AFRINIC bulk WHOIS | Sub-allocations of large companies | Free downloads |
-| ARIN bulk WHOIS | US ranges | Agreement limits use to operational/technical research; **not for products**. Use per-IP RDAP instead |
-| RDAP, reverse DNS (PTR) | Most specific org record; sometimes a corporate hostname | Free, rate-limited |
+| ARIN bulk WHOIS | US ranges | Agreement limits use to operational/technical research; **not for products** |
+| RDAP, reverse DNS (PTR) | Most specific org record; sometimes a corporate hostname | Free, rate-limited. **[corrected]** ARIN RDAP falls under the same RDAP/Whois Terms of Use, which forbid use "as part of a commercial service or product" and for marketing research. Open decision, see `docs/decisions.md` |
 
 ### Paid IP-to-company
 | Vendor | Price | Notes |
 |---|---|---|
-| [ipapi.is](https://ipapi.is/pricing.html) | 1,000/day free; API $20/mo (20k/day); IP-to-Company DB $89/mo | Company name, domain, type (business/isp/hosting/education/government); VPN, datacenter and mobile flags. **Chosen** |
+| [ipapi.is](https://ipapi.is/pricing.html) | 1,000/day free **with a free key** (keyless: 30/day, cut-down response); API $20/mo (20k/day); IP-to-Company DB $89/mo **[verified]** | Company name, domain, type (business/isp/hosting/education/government/banking); VPN, datacenter and mobile flags. Licence is internal-use only unless each user brings their own key, so hosted mode is BYO key. **Chosen** |
 | [MaxMind GeoIP2 ISP](https://www.maxmind.com/en/geoip-databases) | $539/yr | Organization field from WHOIS; Connection Type DB $1,507/yr |
 | [ipregistry](https://ipregistry.co/pricing) | $29/mo for 100k | Company data and VPN detection |
 | [ipdata](https://ipdata.co/pricing.html) | From $50/mo | Company name, domain and type |
 | [Leadfeeder/Dealfront](https://www.leadfeeder.com/pricing/) | Free tier: last 100 companies/mo | Useful as a benchmark |
 | [RB2B](https://www.rb2b.com/pricing) | Free 150 company resolutions/mo; Starter $79/mo | Person-level, US only, identity-graph based (can't be self-built) |
-| IPinfo company data, Snitcher API, KickFire, HubSpot Breeze, 6sense, Demandbase | Enterprise or quote **[unverified]** | Out of budget |
+| IPinfo company data, Snitcher API, KickFire, HubSpot Breeze, 6sense, Demandbase | Enterprise or quote **[unverified]**; not checked in Phase 0 because they are out of budget | Out of budget |
 
 ### Reference repos (stream 1)
 Only demos exist: [loootai/looot-reveal](https://github.com/loootai/looot-reveal) (MIT, vendor-locked), [f0rest06/visitor-signal-engine](https://github.com/f0rest06/visitor-signal-engine) (no licence), [Scalencyai/leadtracker](https://github.com/Scalencyai/leadtracker). Useful building blocks: [jedisct1/iptoasn-webservice](https://github.com/jedisct1/iptoasn-webservice) (BSD-2), [zmap/zannotate](https://github.com/zmap/zannotate) (Apache-2.0).
@@ -41,15 +41,15 @@ Only demos exist: [loootai/looot-reveal](https://github.com/loootai/looot-reveal
 | Source | Access | Cost | Verdict |
 |---|---|---|---|
 | Reddit Data API | OAuth | Free tier non-commercial; closes March 2027 | Don't build on it |
-| Reddit via Google SERP ([Serper](https://serper.dev)) | `site:reddit.com` queries | 2,500 free, then about $1 per 1,000 **[unverified]** | **Chosen**; link out, don't copy content |
+| Reddit via Google SERP ([Serper](https://serper.dev)) | `site:reddit.com` queries | 2,500 free, then $1 per 1,000, **but the smallest pack is $50 for 50k credits, valid 6 months** **[corrected]** | **Chosen**; link out, don't copy content |
 | Hacker News Algolia | `search_by_date`, no key | $0 | Chosen |
-| Bluesky Jetstream | WebSocket, no auth | $0 | Chosen; [skyware-js/jetstream](https://github.com/skyware-js/jetstream) client (MPL-2.0) |
-| Stack Exchange API | App key, about 10k requests/day **[unverified]** | $0 | Chosen |
+| Bluesky Jetstream | WebSocket, no auth | $0 | Chosen; use Jetstream v2 with the official `@bsky/jetstream` client (MIT OR Apache-2.0) instead of skyware-js/jetstream (MPL-2.0, v1 API) **[corrected]** |
+| Stack Exchange API | App key, 10,000 requests/day by default (300/day per IP without a key) **[verified]** | $0 | Chosen |
 | GitHub issues/discussions | REST/GraphQL search | $0 | Chosen for developer-tool offers |
 | X API | Pay-per-use, $0.005 per post read | Variable | Later, narrow queries only |
 | Google Custom Search JSON API | Closed to new customers, ends 2027-01-01 | — | No |
 | LinkedIn, G2, Capterra, Discord, Quora | ToS forbid scraping | — | No |
-| [Syften](https://syften.com/pricing) | $29.95–119.95/mo, API on all plans | — | Upgrade path for Reddit; its Reddit licence status **[unverified]** |
+| [Syften](https://syften.com/pricing) | $29.95–119.95/mo, API on all plans **[verified]** | — | Upgrade path for Reddit, but it claims no Reddit licence and reads Reddit "from the perspective of a logged-out user"; doubtful under our vendor rule **[resolved: no licence found]** |
 | [F5Bot](https://f5bot.com) | Free / $49.99 Gold | — | Reddit coverage after March 2027 unknown |
 | [Octolens](https://octolens.com/pricing) | From $159/mo | — | Too expensive for now |
 
@@ -58,7 +58,7 @@ Only demos exist: [loootai/looot-reveal](https://github.com/loootai/looot-reveal
 **Identity:** Reddit's Public Content Policy forbids using its content to identify individuals. The thread is the lead; reply in it openly.
 
 **Reference repos:**
-- [obris-dev/openmagpie](https://github.com/obris-dev/openmagpie): Apache-2.0 plus `ee/`; check the licence detail.
+- [obris-dev/openmagpie](https://github.com/obris-dev/openmagpie): Apache-2.0; `ee/` is reserved but doesn't exist. Python, so reuse means porting; only its HN and RSS connectors fit our rules **[verified]**.
 - [yangyixxxx/lead-signal-listener](https://github.com/yangyixxxx/lead-signal-listener): MIT.
 - [dancolta/subscope](https://github.com/dancolta/subscope): MIT. Relies on dead Reddit endpoints.
 - [rohansx/leadecho](https://github.com/rohansx/leadecho): no licence.
@@ -70,7 +70,7 @@ Only demos exist: [loootai/looot-reveal](https://github.com/loootai/looot-reveal
 | Source | Coverage | Terms |
 |---|---|---|
 | [PDL free company dataset](https://docs.peopledatalabs.com/docs/free-company-dataset) | 22M+ companies worldwide, name, domain, size, industry, LinkedIn URL | CC BY 4.0, quarterly |
-| SEC EDGAR | US public companies, officers | Free, about 10 req/s **[unverified]** |
+| SEC EDGAR | US public companies, officers (no domains: `website` is empty) | Free, 10 req/s, declared User-Agent required **[verified]** |
 | SAM.gov, USAspending | Government suppliers, NAICS | Free |
 | [Overture Places](https://docs.overturemaps.org/) | Tens of millions of POIs with websites | CDLA-Permissive-2.0 / Apache-2.0 |
 | GLEIF LEI, Wikidata | Entity matching, larger firms | CC0 |
@@ -79,20 +79,20 @@ Only demos exist: [loootai/looot-reveal](https://github.com/loootai/looot-reveal
 | Crunchbase | Funding | Free Basic API discontinued. Skip |
 
 ### Technographics
-[projectdiscovery/httpx](https://github.com/projectdiscovery/httpx) `-td` with [wappalyzergo](https://github.com/projectdiscovery/wappalyzergo) (MIT) is the best choice. HTTP Archive on BigQuery covers about 12.5M domains monthly **[unverified]**. 300k homepages take about 1–3 hours on one VPS (estimate).
+[projectdiscovery/httpx](https://github.com/projectdiscovery/httpx) `-td` with [wappalyzergo](https://github.com/projectdiscovery/wappalyzergo) (MIT) is the best choice. HTTP Archive on BigQuery covers about 12.7M **URLs** monthly, from CrUX (**[corrected]**; the domain count is still **[unverified]**). 300k homepages take about 1–3 hours on one VPS (estimate).
 
 ### People and email
 | Vendor | Price | Notes |
 |---|---|---|
-| [Icypeas](https://icypeas.com/pricing) | $19 per 1,000 credits; Find People 0.02 credits per result; credits don't expire | **Chosen** fallback |
-| [LeadMagic](https://leadmagic.io/pricing) | $0.007–0.02 per found email; failed lookups free | Upgrade path |
+| [Icypeas](https://icypeas.com/pricing) | $19/mo subscription for 1,000 credits; email search charged only when found; Find People 0.02 credits per result; credits don't expire **[verified]** | Fallback, **but its data is LinkedIn-derived**; open decision in `docs/decisions.md` |
+| [LeadMagic](https://leadmagic.io/pricing) | $0.007–0.02 per found email; failed lookups free; **plans start at $99/mo** **[verified]** | Upgrade path |
 | [Hunter](https://hunter.io/pricing) | $49/mo for 2,000 credits | Mid-priced |
 | [People Data Labs](https://www.peopledatalabs.com/pricing/person) | 100 free credits/mo with emails hidden; about $0.28/record | Too expensive per record |
 | [Apollo](https://www.apollo.io/pricing) | API only on Custom plans; terms bar backend use | Skip |
-| ZoomInfo | About $15k/yr, about $3 per contact **[unverified]** | The benchmark we beat |
+| ZoomInfo | Median contract about $33.5k/yr (Vendr, Feb 2026) **[corrected]**; about $3 per contact **[unverified]** | The benchmark we beat |
 | Coresignal, Bright Data, ScrapIn | LinkedIn-derived | Same legal risk as Proxycurl. Skip |
 
-**Self-hosted verification:** [reacherhq/check-if-email-exists](https://github.com/reacherhq/check-if-email-exists) (10.4k stars). Needs outbound port 25 and a clean IP. Expect roughly 20–40% of B2B domains to be catch-all or unknown (estimate). netcup port 25 policy **[unverified]**.
+**Self-hosted verification:** [reacherhq/check-if-email-exists](https://github.com/reacherhq/check-if-email-exists) (10.4k stars), **MIT since v0.11.9 (2026-10-09)** **[verified]**. Needs outbound port 25 and a clean IP. Expect roughly 20–40% of B2B domains to be catch-all or unknown (estimate). netcup port 25: the default firewall policy "netcup Mail block" blocks SMTP and can be removed by the customer (docs); the live test on the VPS is still pending **[unverified]**.
 
 **Crawling:**
 - [Crawl4AI](https://github.com/unclecode/crawl4ai): Apache-2.0, Python.
@@ -101,7 +101,7 @@ Only demos exist: [loootai/looot-reveal](https://github.com/loootai/looot-reveal
 
 The engine starts with plain fetch plus readability in Node to stay inside the memory budget.
 
-**Expected cost:** about $0.02–0.05 per enriched contact with the waterfall in SPEC §5.1, versus about $0.28 at PDL and about $3 at ZoomInfo **[unverified]**.
+**Expected cost:** about $0.02–0.05 per enriched contact with the waterfall in SPEC §5.1 (estimate), versus about $0.28 at PDL and about $3 at ZoomInfo (the ZoomInfo figure is **[unverified]**).
 
 ## End-to-end and orchestration projects
 
