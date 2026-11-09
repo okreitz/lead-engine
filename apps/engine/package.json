@@ -10,7 +10,8 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx src/db/migrate-cli.ts"
+    "db:migrate": "tsx src/db/migrate-cli.ts",
+    "check:claude": "tsx src/llm/check-cli.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.7.0",

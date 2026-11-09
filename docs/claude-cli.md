@@ -97,6 +97,6 @@ Adapter rules:
 
 ## Risks to recheck on CLI upgrades
 
-- `--bare` becoming the `-p` default would make the CLI ignore the subscription login. The adapter should fail clearly ("not logged in / needs API key"). On every CLI upgrade, rerun the canonical invocation above and update this file (a check script is planned for Phase 1).
+- `--bare` becoming the `-p` default would make the CLI ignore the subscription login. The adapter should fail clearly ("not logged in / needs API key"). On every CLI upgrade, rerun the canonical invocation above and update this file (`pnpm --filter @le/engine check:claude` runs it with a one-line prompt).
 - `--max-turns` is in the docs but not in `--help`. Don't rely on it.
 - Model aliases move: `haiku` resolved to `claude-haiku-5-5` today. Record `modelUsage` keys in the ledger.
