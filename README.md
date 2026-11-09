@@ -19,7 +19,7 @@ pnpm dev          # web 127.0.0.1:4500, engine 127.0.0.1:4501, collector 127.0.0
 pnpm typecheck && pnpm lint && pnpm test
 pnpm db:migrate   # apply Drizzle migrations to data/le.db
 pnpm rss          # build, start and measure idle RSS of web + engine (limit 512 MB)
-docker compose -f deploy/compose.yaml up --build
+docker compose -f deploy/compose.yaml -f deploy/compose.local.yaml up --build   # needs LE_MASTER_KEY, LE_SETUP_TOKEN; Coolify: deploy/coolify.md
 ```
 
 First run: open http://127.0.0.1:4500 and create the first user and workspace. Off loopback (Docker, VPS) setup also needs `LE_SETUP_TOKEN`. Set `LE_MASTER_KEY` (`openssl rand -base64 32`) before saving provider keys.

@@ -45,5 +45,5 @@ COPY --from=build --chown=node:node /app/apps/web/.next/static ./apps/web/.next/
 USER node
 EXPOSE 4500
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s \
-  CMD ["node", "-e", "fetch('http://127.0.0.1:4500/').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
+  CMD ["node", "-e", "fetch('http://127.0.0.1:4500/login').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))"]
 CMD ["node", "apps/web/server.js"]
