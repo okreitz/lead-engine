@@ -71,3 +71,18 @@ Until the VPS port 25 test passes, Reacher sits behind a config flag that defaul
 
 ## PENDING: netcup port 25
 Still waiting for Olaf's test on the VPS (`nc -vz -w5 gmail-smtp-in.l.google.com 25`). See the last section of `docs/providers.md`.
+
+## 2026-11-09: The browser talks only to the web app; it proxies `/api/v1` to the engine
+`apps/web/src/app/api/v1/[...path]/route.ts` forwards an allowlist of headers to `LE_ENGINE_URL`. The session cookie stays first-party and httpOnly on the web origin, the engine port is never exposed, and `LE_ENGINE_URL` is read at request time so the standalone Docker build needs no rebuild per deployment.
+
+## 2026-11-09: Sessions are random tokens stored as SHA-256, with a per-session CSRF token
+argon2id (`@node-rs/argon2`, m=19 MiB, t=2, p=1) for passwords. Cookies are httpOnly, SameSite=Lax, Secure over HTTPS, 30-day absolute and 7-day idle lifetime. Every unsafe method needs `x-csrf-token` matching the session. Bearer tokens (SHA-256 stored) are opt-in per route; read tokens are GET-only.
+
+## 2026-11-09: First-user setup needs `LE_SETUP_TOKEN` off loopback
+`POST /auth/setup` works only while no user exists. When the engine binds anything but loopback (Docker, VPS), it also needs `LE_SETUP_TOKEN`, so nobody can claim a fresh public instance first.
+
+## 2026-11-09: Provider keys are AES-256-GCM with workspace and provider as AAD
+Format `v1.<iv>.<tag>.<ct>`. Binding the ciphertext to `workspaceId:provider` stops a copied row from decrypting elsewhere. Keys are never returned by the API; without `LE_MASTER_KEY` saving a key answers 503.
+
+## 2026-11-09: No `linkedinUrl` columns
+SPEC §3 lists `linkedinUrl` on Company and Contact. Since we never store LinkedIn-derived data, the columns don't exist, so nothing can be written to them by mistake.
