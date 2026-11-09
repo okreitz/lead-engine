@@ -101,3 +101,6 @@ The SDK's `parse()` throws before we can read usage on truncated output. We call
 
 ## 2026-11-09: Untrusted text goes in escaped `<untrusted_data>` blocks
 `llm/prompt.ts` strips control and bidi characters, neutralises any `<untrusted_data`/`</untrusted_data` inside the data, sanitises attributes and caps each block at 12k characters. The system prompt always carries the "data, not instructions" rules. A test checks that the CLI adapter's flags match `docs/claude-cli.md` exactly.
+
+## 2026-11-09: Coolify deploy: no published ports, required secrets, a login gate on every page
+`deploy/compose.yaml` targets Coolify's Docker Compose build pack: services only `expose` ports and Coolify's proxy routes the domains (web :4500 now, collector :4511 in Phase 3; the API :4501 is never routed). `LE_MASTER_KEY` and `LE_SETUP_TOKEN` use `${VAR:?}`, so Coolify won't deploy without them. Local runs add `deploy/compose.local.yaml`, which publishes on 127.0.0.1. `apps/web/src/proxy.ts` redirects every page without a session cookie to `/login`; the engine still validates every API call. Steps are in `deploy/coolify.md`.
