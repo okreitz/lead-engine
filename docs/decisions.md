@@ -101,3 +101,12 @@ The SDK's `parse()` throws before we can read usage on truncated output. We call
 
 ## 2026-11-09: Untrusted text goes in escaped `<untrusted_data>` blocks
 `llm/prompt.ts` strips control and bidi characters, neutralises any `<untrusted_data`/`</untrusted_data` inside the data, sanitises attributes and caps each block at 12k characters. The system prompt always carries the "data, not instructions" rules. A test checks that the CLI adapter's flags match `docs/claude-cli.md` exactly.
+
+## 2026-11-09: Suppression is a query-time filter, not a status flag
+Every list, detail, board and export query adds `NOT EXISTS` guards against the global and workspace suppression lists (`crm/filters.ts`). A domain covers its subdomains and every email at them. Adding an entry hides records at once and removing one restores them, with no batch updates to drift. New contacts with a suppressed email are refused, and CSV imports skip them. The API manages workspace entries; global entries (`workspace_id` NULL) are for the instance operator and are honoured everywhere, but have no UI yet.
+
+## 2026-11-09: The pipeline board moves accounts; deal stages are logged too
+SPEC §6's board is per account (`Account.stage`). Deals keep their own stage on the account page. Both kinds of stage change write a `stage_change` Activity with `{from, to}`, which the ROI view will use for attribution.
+
+## 2026-11-09: CSV import is per-row, US-only, and exports neutralise formulas
+Each row runs in its own savepoint, so bad rows are reported (row number + reason) without undoing good ones. Accounts need an explicit US country; contacts and deals match accounts by domain. Exports leave out suppressed records, prefix cells starting with `= + - @` to stop spreadsheet formula injection, are audited, and sit behind the CAN-SPAM checklist in the UI.
