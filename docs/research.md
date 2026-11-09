@@ -97,7 +97,7 @@ Only demos exist: [loootai/looot-reveal](https://github.com/loootai/looot-reveal
 **Crawling:**
 - [Crawl4AI](https://github.com/unclecode/crawl4ai): Apache-2.0, Python.
 - [Firecrawl](https://github.com/firecrawl/firecrawl): AGPL.
-- [ScrapeGraphAI](https://github.com/ScrapeGraphAI/Scrapegraph-ai): MIT.
+- [ScrapeGraphAI](https://github.com/ScrapeGraphAI/Scrapegraph-ai): MIT. Not used as a dependency; see "Evaluated and rejected" below.
 
 The engine starts with plain fetch plus readability in Node to stay inside the memory budget.
 
@@ -121,6 +121,20 @@ Licence notes:
 - n8n uses the Sustainable Use License (not OSI-approved).
 - RudderStack and Mautic use the Elastic License 2.0 (per this research).
 - Avoid both as embedded dependencies.
+
+## Evaluated and rejected
+
+### ScrapeGraphAI (checked 2026-11-09, v2.3.1, MIT)
+LLM-driven scraping pipelines (`SmartScraperGraph`: fetch → html2text → chunk → LLM fills a schema). Not used as a dependency, for these reasons. Each was checked against its `pyproject.toml` and source on `main` on 2026-11-09.
+
+- **Telemetry on by default and it carries our data.** `scrapegraphai/telemetry/telemetry.py` defaults to enabled (`_check_config_and_environ_for_telemetry_flag(True, …)`) and posts prompt, schema, page content, LLM response and source URL to `https://sgai-oss-tracing.onrender.com/v1/telemetry`. It can be disabled with `SCRAPEGRAPHAI_TELEMETRY_ENABLED=false`, but leaking crawled company pages and extracted names by default is unacceptable for this product.
+- **Works around site terms.**
+  - Its web search (`utils/research_web.py`) scrapes Bing and DuckDuckGo directly with rotating random user-agents.
+  - Dependencies include `undetected-playwright` (bot-detection evasion) and `free-proxy` (proxy rotation), plus loaders for the Browserbase and scrape.do unblocking services (`docloaders/browser_base.py`, `docloaders/scrape_do.py`).
+  - The standard graphs don't check robots.txt. An optional `RobotsNode` exists for custom graphs only: it fetches robots.txt with Chromium and asks the LLM whether scraping is allowed. That is not a deterministic check.
+- **Doesn't fit the stack.** It needs Python ≥3.12, the full LangChain stack and Playwright/Chromium, against our TypeScript engine, 512 MB VPS budget and no-Chromium-on-VPS rule. LLMs go through LangChain, so the `claude` CLI path isn't possible.
+
+**What we take instead:** SPEC §4.4–4.5 already covers the same single-page extraction in TypeScript: our own fetch with robots.txt and rate limits, readability, and Claude with schema-validated output. Because it's MIT, its extraction prompts and chunking approach may be borrowed, with attribution in `NOTICE`.
 
 ## Legal (US only)
 - **CAN-SPAM:** opt-out regime. Accurate headers, honest subject, physical address, opt-outs honoured within 10 business days.
