@@ -71,3 +71,6 @@ Until the VPS port 25 test passes, Reacher sits behind a config flag that defaul
 
 ## PENDING: netcup port 25
 Still waiting for Olaf's test on the VPS (`nc -vz -w5 gmail-smtp-in.l.google.com 25`). See the last section of `docs/providers.md`.
+
+## 2026-11-09: The UI follows docs/ui.md
+Before building any screens, we researched the UIs of Apollo, ZoomInfo, Clay, Common Room, Octolens, Leadfeeder, RB2B, Warmly, 6sense, Attio, Twenty, HubSpot and Linear. The main complaints were credit anxiety, untrusted data, black-box scores and clutter. So every score shows its reasons, every enriched field shows its source, every paid action shows its cost first, the sidebar has at most 8 items, and the app opens on a Today page. Details and sketches are in `docs/ui.md`.
