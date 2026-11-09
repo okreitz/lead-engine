@@ -1,4 +1,5 @@
 import { buildApi } from './api/server.ts';
+import type { AppContext } from './api/context.ts';
 import { buildCollector } from './collector/server.ts';
 import { loadConfig } from './config.ts';
 import { openDb } from './db/client.ts';
@@ -9,7 +10,8 @@ const config = loadConfig();
 const db = openDb(config.dbPath);
 runMigrations(db);
 
-const api = buildApi({ logLevel: config.logLevel });
+const ctx: AppContext = { db, config, now: Date.now };
+const api = buildApi(ctx, { logLevel: config.logLevel });
 const collector = buildCollector({ logLevel: config.logLevel });
 
 await api.listen({ host: config.host, port: config.enginePort });

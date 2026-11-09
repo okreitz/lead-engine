@@ -18,6 +18,10 @@ services:
     environment:
       LE_LOG_LEVEL: ${LE_LOG_LEVEL:-info}
       LE_MASTER_KEY: ${LE_MASTER_KEY:-}
+      # Required for first-user setup, because the container binds 0.0.0.0.
+      LE_SETUP_TOKEN: ${LE_SETUP_TOKEN:-}
+      LE_COOKIE_SECURE: ${LE_COOKIE_SECURE:-auto}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - le-data:/data
     ports:
