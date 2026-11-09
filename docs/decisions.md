@@ -86,3 +86,6 @@ Format `v1.<iv>.<tag>.<ct>`. Binding the ciphertext to `workspaceId:provider` st
 
 ## 2026-11-09: No `linkedinUrl` columns
 SPEC §3 lists `linkedinUrl` on Company and Contact. Since we never store LinkedIn-derived data, the columns don't exist, so nothing can be written to them by mistake.
+
+## 2026-11-09: Coolify deploy: no published ports, required secrets, a login gate on every page
+`deploy/compose.yaml` targets Coolify's Docker Compose build pack: services only `expose` ports and Coolify's proxy routes the domains (web :4500 now, collector :4511 in Phase 3; the API :4501 is never routed). `LE_MASTER_KEY` and `LE_SETUP_TOKEN` use `${VAR:?}`, so Coolify won't deploy without them. Local runs add `deploy/compose.local.yaml`, which publishes on 127.0.0.1. `apps/web/src/proxy.ts` redirects every page without a session cookie to `/login`; the engine still validates every API call. Steps are in `deploy/coolify.md`.
