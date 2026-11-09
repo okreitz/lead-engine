@@ -23,6 +23,7 @@ import {
   setAccountStage,
 } from '../../crm/accounts.ts';
 import { exportCsv, importCsv } from '../../crm/csv-io.ts';
+import { rescoreAccount, rescoreWorkspace } from '../../crm/scoring.ts';
 import {
   addNextStep,
   addSuppression,
@@ -92,9 +93,17 @@ export function registerCrmRoutes(app: FastifyInstance, ctx: AppContext): void {
     const { workspaceId, userId } = workspaceOf(request);
     const body = parse(createAccountBodySchema, request.body);
     const res = crm(() =>
-      ctx.db.transaction((tx) =>
-        createAccount(tx, workspaceId, { ...body, ownerUserId: userId }, 'manual', ctx.now()),
-      ),
+      ctx.db.transaction((tx) => {
+        const r = createAccount(
+          tx,
+          workspaceId,
+          { ...body, ownerUserId: userId },
+          'manual',
+          ctx.now(),
+        );
+        if (r.created) rescoreAccount(tx, workspaceId, r.id, ctx.now());
+        return r;
+      }),
     );
     return reply.code(res.created ? 201 : 200).send(res);
   });
@@ -162,6 +171,14 @@ export function registerCrmRoutes(app: FastifyInstance, ctx: AppContext): void {
       ctx.db.transaction((tx) => setAccountStage(tx, workspaceId, id, stage, userId, ctx.now())),
     );
     return { ok: true, changed };
+  });
+
+  app.post('/api/v1/accounts/:id/rescore', async (request) => {
+    const { workspaceId } = workspaceOf(request);
+    const { id } = parse(idParam, request.params);
+    crm(() => requireAccount(ctx.db, workspaceId, id));
+    ctx.db.transaction((tx) => rescoreAccount(tx, workspaceId, id, ctx.now()));
+    return { ok: true };
   });
 
   app.get('/api/v1/pipeline', { config: { token: 'read' } }, async (request) => {
@@ -395,6 +412,8 @@ export function registerCrmRoutes(app: FastifyInstance, ctx: AppContext): void {
       throw new HttpError(415, 'csv_expected', 'send the CSV as text/csv');
     const text = request.body;
     const report = crm(() => importCsv(ctx.db, workspaceId, entity, text, ctx.now()));
+    if (entity === 'accounts' && report.created)
+      ctx.db.transaction((tx) => rescoreWorkspace(tx, workspaceId, ctx.now()));
     audit(
       ctx.db,
       {

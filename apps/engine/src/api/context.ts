@@ -1,5 +1,6 @@
 import type { Config } from '../config.ts';
 import type { Db } from '../db/client.ts';
+import type { Crawler } from '../crawler/crawler.ts';
 import type { LlmAdapter } from '../llm/types.ts';
 
 /** Everything route handlers and jobs need. Tests build one with fakes. */
@@ -9,4 +10,6 @@ export interface AppContext {
   now: () => number;
   /** Forces one LLM adapter (tests use `fakeLlm`). */
   llm?: LlmAdapter;
+  /** Crawler override (tests use a fake fetch). */
+  crawler?: Crawler;
 }
