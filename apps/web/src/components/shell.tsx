@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useEffect, type ReactNode } from 'react';
+import { BudgetBanner } from '@/components/budget';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api, errorMessage } from '@/lib/api';
@@ -83,7 +84,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Button>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 p-6">{data.workspace ? children : <CreateWorkspace />}</main>
+      <main className="min-w-0 flex-1 p-6">
+        {data.workspace ? (
+          <>
+            <BudgetBanner />
+            {children}
+          </>
+        ) : (
+          <CreateWorkspace />
+        )}
+      </main>
     </div>
   );
 }

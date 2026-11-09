@@ -24,6 +24,7 @@ import {
   type WorkspaceSettings,
 } from '../../db/schema.ts';
 import { newId, newToken, sha256 } from '../../ids.ts';
+import { resumeWaitingJobs } from '../../jobs/queue.ts';
 import { createWorkspace, getWorkspace } from '../../workspaces.ts';
 import type { AppContext } from '../context.ts';
 import { HttpError, parse, sessionOf, workspaceOf } from '../http.ts';
@@ -80,6 +81,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: AppContext): 
     const capsChanged =
       body.settings?.subCaps !== undefined || body.settings?.enforceSubCaps !== undefined;
     if (budgetChanged || capsChanged) {
+      resumeWaitingJobs(ctx.db, workspaceId, now);
       audit(
         ctx.db,
         {
@@ -338,6 +340,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: AppContext): 
       },
       now,
     );
+    resumeWaitingJobs(ctx.db, workspaceId, now);
     return { ok: true };
   });
 

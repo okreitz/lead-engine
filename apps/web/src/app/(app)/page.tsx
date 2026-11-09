@@ -1,4 +1,5 @@
 'use client';
+import { BudgetCard } from '@/components/budget';
 import { Card, CardTitle } from '@/components/ui/card';
 import { useMe } from '@/lib/me';
 
@@ -13,6 +14,7 @@ export default function Overview() {
           The pipeline summary arrives with the CRM. Configure the workspace under Settings.
         </p>
       </Card>
+      <BudgetCard />
     </div>
   );
 }
