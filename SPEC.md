@@ -19,7 +19,7 @@ First users: &Human, &Human / okreitz consulting, and Olaf's new ventures. Each 
 ### Non-goals for v1
 - Sending email or sequences (later, see §14).
 - Identifying individual website visitors by name (RB2B-style). Company-level only.
-- Scraping LinkedIn, Reddit, G2 or any site whose terms forbid it.
+- Scraping LinkedIn, Reddit, G2 or any site whose terms forbid it, or storing LinkedIn-derived profile data from any source.
 - Linking a Reddit, Hacker News or Bluesky username to a real person.
 - Any market outside the US.
 - Billing and self-serve signup (Phase 5 designs for them).
@@ -154,7 +154,7 @@ AuditLog        { id, workspaceId?, userId?, action, target, at, details }
   4. calls the provider,
   5. writes `CostLedger`,
   6. writes `FieldSource`.
-- Waterfalls are ordered lists per operation, cheapest first, and stop at the first confident result. Example `findEmail`: pattern + Reacher → Icypeas → (later) LeadMagic.
+- Waterfalls are ordered lists per operation, cheapest first, and stop at the first confident result. Example `findEmail`: pattern + Reacher (when enabled) → Icypeas email-finder → (later) LeadMagic.
 - Providers that bill only on success are preferred.
 
 ### 4.4 LLM adapter
@@ -177,7 +177,7 @@ AuditLog        { id, workspaceId?, userId?, action, target, at, details }
 1. **Company universe import** (Mac job, re-run quarterly):
    - People Data Labs free company dataset (CC BY 4.0), filtered to `country = US` with a website.
    - SEC EDGAR company list.
-   - SAM.gov entity extract.
+   - SAM.gov entity extract (optional: needs an API key and allows 10 requests/day, so only the monthly public extract).
    - Overture Places (US, with website) for local businesses.
    - Each source is normalised by domain and merged into `Company`. Only the ICP-matching subset is synced to the VPS.
 2. **ICP filter:** SQL over `Company` by industry/NAICS, size, state and founded year. The result is a candidate list (default 500 per run).
@@ -186,13 +186,13 @@ AuditLog        { id, workspaceId?, userId?, action, target, at, details }
 5. **People:**
    - Discover team, about, leadership and company pages from the sitemap and nav links.
    - The LLM extracts `{name, title, sourceUrl}` and matches the titles to personas.
-   - Fallback: Icypeas *Find People* for the persona titles, within budget.
-   - For public companies, add officers from EDGAR.
+   - For public companies, add officers from EDGAR (Form 3/4/5 reporting owners).
+   - No people-search vendor: Icypeas *Find People* is not used because it returns LinkedIn profile data.
 6. **Email:**
    1. Learn the domain's email pattern from addresses published on its site.
    2. Generate permutations.
-   3. Verify with Reacher (`deliverable` / `risky` / `catch_all` / `unknown`).
-   4. Only `catch_all` and `unknown` go to Icypeas email-finder, within budget.
+   3. Verify with Reacher when it is enabled. It sits behind a config flag that is **off by default** until outbound port 25 is confirmed, and runs at low volume with per-domain throttling. Its `safe` / `risky` / `invalid` / `unknown` results plus `smtp.is_catch_all` map onto `emailStatus` as in `docs/providers.md`. With Reacher off, Icypeas email-verification (0.1 credit) is the verifier.
+   4. Only `catch_all` and `unknown` go to Icypeas email-finder, within budget. Only the email, certainty and status are kept from an Icypeas response; any LinkedIn-derived field is dropped before storage.
    5. Store each result with an `emailStatus` and a source.
 7. **Hiring signal** (optional): career pages and ATS job boards (Greenhouse, Lever, Ashby public JSON) for roles that match the offer's pain points. No LinkedIn.
 
@@ -210,7 +210,7 @@ AuditLog        { id, workspaceId?, userId?, action, target, at, details }
    - Then ipapi.is (free tier, 1,000 per day, cached 30 days in `IpLookupCache`).
    - **ISP, mobile, hosting and VPN → drop**, counter only.
 6. For business-type IPs:
-   - Company domain from ipapi.is `company.domain`, else RDAP (most specific record), else PTR record.
+   - Company domain from ipapi.is `company.domain`, else the PTR hostname, else our own `IpCompany` map from form fills (step 4). No ARIN RDAP: its terms forbid commercial and marketing use (`docs/decisions.md`).
    - Write an `IpCompany` row with its source and confidence.
 7. Resolve the domain to a `Company`, upsert the `Account` (`firstSource = visits`), and write a `Visit` plus a `Signal`. Pricing, demo and contact pages carry extra weight.
 8. A new account at or above the fit threshold queues the stream 3 *people + email* job (budget permitting).
@@ -281,7 +281,8 @@ AuditLog        { id, workspaceId?, userId?, action, target, at, details }
 - Every paid call checks the remaining budget first:
   - At 80%, a warning shows in the UI.
   - At 100%, paid calls stop, and jobs wait with the reason "budget reached".
-- Free quotas are tracked as counters (ipapi.is 1,000 per day, Serper's free credits) and used before paid calls.
+- Free quotas are tracked as counters (ipapi.is 1,000 per day on each workspace's own free key, Serper's 2,500 free queries) and used before paid calls.
+- The Reddit (Serper) sub-cap defaults to **$0**: the engine uses only the free queries and never buys a Serper pack (the smallest is $50). Raising it is a manual budget decision.
 - Per-stream sub-caps are optional (default: stream 3 60%, stream 2 20%, stream 1 10%, LLM 10%).
 
 ### 8.2 Starting budget (about $30 of $50)
@@ -289,10 +290,10 @@ AuditLog        { id, workspaceId?, userId?, action, target, at, details }
 | Item | Monthly |
 |---|---|
 | netcup VPS (existing) | $0 |
-| Stream 1: free country/ASN databases, ipapi.is free tier, RDAP, PTR | $0 |
+| Stream 1: free country/ASN databases, ipapi.is free tier (workspace key), PTR | $0 |
 | Stream 2: HN, Bluesky, Stack Exchange, GitHub | $0 |
-| Stream 2: Reddit via Serper (about 600 searches after the free credits) | about $1 |
-| Stream 3: Icypeas 1,000 credits, only after Reacher | $19 |
+| Stream 2: Reddit via Serper, inside the 2,500 free queries | $0 |
+| Stream 3: Icypeas 1,000 credits (email finder and verifier only), after Reacher when enabled | $19 |
 | LLM: Anthropic API on the VPS (Mac uses `claude` CLI) | about $5 |
 | Headroom | about $20 |
 
@@ -305,7 +306,6 @@ For each stream and month: spend, accounts created, qualified accounts (fit ≥ 
 |---|---|---|
 | More than 1,000 new IPs/day needing classification | ipapi.is API | +$20 |
 | More than 20,000 new IPs/day | ipapi.is self-hosted IP-to-Company DB | +$89 |
-| Reddit threads convert to meetings | Syften (real-time Reddit, Product Hunt, Slack) | +$50 |
 | Email find rate under 50% | LeadMagic as a second finder | per result |
 | Visits convert and named visitors are wanted | RB2B (US only) | +$79 |
 | Need narrow X/Twitter coverage | X API pay-per-use | per read |
@@ -325,7 +325,7 @@ For each stream and month: spend, accounts created, qualified accounts (fit ≥ 
 - **Website owners:** `docs/privacy-snippet.md` gives a privacy-policy paragraph (company-level analytics from IP, no cookies, opt-out contact) covering CCPA disclosure.
 - **No person-level visitor identification and no session replay.** This also keeps California wiretap-law (CIPA) pixel risk low.
 - **Outreach** (outside the engine in v1): exports carry a CAN-SPAM checklist (accurate headers, honest subject, physical address, working opt-out).
-- **Data sources:** only sources whose terms allow this use (see `docs/research.md`). No LinkedIn scraping, and no data from LinkedIn-scraping vendors.
+- **Data sources:** only sources and vendors whose terms allow this use (see `docs/providers.md`). No scraping of LinkedIn or other ToS-protected sites, and no LinkedIn-derived profile data (profile URLs, Sales Navigator IDs, scraped profile fields) is stored or used, even when a vendor returns it. No ARIN RDAP (its terms forbid commercial use).
 
 ---
 
@@ -455,4 +455,4 @@ lead-engine/
 
 ## 14. Later (design for, don't build)
 
-Email sending with sequences and CAN-SPAM footer (own SMTP or listmonk) · LeadMagic and other finders in the waterfall · Syften adapter · RB2B webhook import · X API adapter · HTTP Archive technographics at scale · Ground Control Leads card and actions · billing and self-serve signup · Chrome extension for logging LinkedIn conversations manually · additional countries (needs a GDPR design first).
+Email sending with sequences and CAN-SPAM footer (own SMTP or listmonk) · LeadMagic and other finders in the waterfall · RB2B webhook import · X API adapter · HTTP Archive technographics at scale · Ground Control Leads card and actions · billing and self-serve signup · Chrome extension for logging LinkedIn conversations manually · additional countries (needs a GDPR design first).

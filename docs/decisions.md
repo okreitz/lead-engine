@@ -51,21 +51,23 @@ Reacher is MIT since v0.11.9, so the sidecar is fine. Use `/v1/check_email` with
 ## 2026-11-08: Drop LinkedIn-derived fields on import
 The PDL free dataset's `linkedin_url` and `id` come from LinkedIn, so they are not imported. We don't scrape LinkedIn and don't want to store its identifiers. The `industry` enum is kept as a label.
 
-## OPEN, needs Olaf: RDAP in the visitor pipeline
-ARIN's RDAP/Whois Terms of Use forbid use "as part of a commercial service or product" and for "marketing research", and every ARIN RDAP response points to them. SPEC §5.2 step 6 uses RDAP as a company-domain fallback. Options:
-- (a) drop RDAP and rely on ipapi.is, the form-built IP map and PTR;
-- (b) keep it off by default, opt-in for self-hosted non-commercial use only, never in hosted mode;
-- (c) ask ARIN for written authorisation.
+## 2026-11-09: Guideline: do what we can without breaking anyone's terms
+Olaf's rule for the open Phase 0 items: use every source we can, but never break a provider's or site's terms and conditions. The decisions below apply it.
 
-Proposed: **(a) now, (c) in parallel**. Until decided, Phase 3 builds no RDAP adapter.
+## 2026-11-09: No ARIN RDAP
+ARIN's RDAP/Whois Terms of Use forbid use "as part of a commercial service or product" and for "marketing research", and every ARIN RDAP response points to them. RDAP is removed from SPEC §5.2 step 6. Business IPs resolve to a company through ipapi.is `company.domain`, then the PTR hostname, then our own `IpCompany` map from form fills. We are not asking ARIN for permission for now.
 
-## OPEN, needs Olaf: Icypeas and LinkedIn-derived data
-Icypeas Find People returns LinkedIn profile URLs and Sales Navigator URNs, and its API sells LinkedIn profile scrapers. CLAUDE.md says not to use vendors that scrape LinkedIn. Options:
-- (a) drop Icypeas entirely; LeadMagic starts at $99/mo, Hunter at $49 for 2,000 credits, but their data sources are unchecked;
-- (b) keep only email-finder and verifier calls, which take name + domain and return an email, and never call Find People or the scrapers;
-- (c) find another finder whose sourcing is clean.
+## 2026-11-09: Icypeas email finder and verifier only; no LinkedIn-derived data
+Icypeas *Find People* returns LinkedIn profile URLs and Sales Navigator IDs, so it is not used. People come from team, about and leadership page crawling, plus SEC EDGAR officers for public companies. The email finder and verifier break no terms and return only an email, a certainty and a status, so they stay. The data-source rule in CLAUDE.md and SPEC §1/§9 was narrowed (Olaf's decision, confirmed 2026-11-09) from "don't use vendors that scrape LinkedIn" to "never scrape LinkedIn or other ToS-protected sites, and never store or use LinkedIn-derived profile data, including when a vendor returns it". Every provider adapter keeps only the fields we need and drops LinkedIn-derived fields before storage.
 
-Proposed: **(b) only if you accept the vendor-level risk; otherwise (a)/(c)**. Either way, SPEC §5.1 step 5's Find People fallback is removed. Until decided, no Icypeas adapter is built.
+## 2026-11-09: Reacher off by default; Icypeas verifier as fallback
+Until the VPS port 25 test passes, Reacher sits behind a config flag that defaults to off, and Icypeas email-verification (0.1 credit) is the verifier. When it is enabled it runs at low volume with per-domain throttling. If netcup's default SMTP block is in place, deleting the "netcup Mail block" firewall policy in the server control panel is netcup's own documented option.
+
+## 2026-11-09: Serper free only; Syften dropped; SAM.gov optional
+- **Serper:** the Reddit (Serper) sub-cap defaults to $0, so the engine runs on the 2,500 free queries and never buys the $50 pack. Raising it is a manual budget decision.
+- **ipapi.is:** each workspace uses its own free key, as its terms require.
+- **Syften:** removed from the upgrade ladder (SPEC §8.4, §14). It claims no Reddit licence.
+- **SAM.gov:** optional. It needs an API key and allows 10 requests/day, so we use only the monthly public extract.
 
 ## PENDING: netcup port 25
-netcup's default firewall policy blocks SMTP; the live test from the VPS is pending. See the last section of `docs/providers.md` for the command and what each result means for Reacher.
+Still waiting for Olaf's test on the VPS (`nc -vz -w5 gmail-smtp-in.l.google.com 25`). See the last section of `docs/providers.md`.

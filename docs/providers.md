@@ -11,16 +11,16 @@ No accounts were created, no keys were used and nothing was spent. Live calls us
 
 | # | Finding | Impact | Status |
 |---|---|---|---|
-| 1 | **ARIN's RDAP/Whois Terms of Use cover RDAP** and forbid use "as part of a commercial service or product" and "for … marketing research". | SPEC §5.2 step 6 ("else RDAP") is not usable as written for US IPs in a hosted product. research.md's "use per-IP RDAP instead [of bulk WHOIS]" doesn't avoid the restriction. | **Open: Olaf to decide** (see `decisions.md`) |
-| 2 | **Icypeas data is LinkedIn-derived.** Find People returns `linkedin.com/in/…` URLs and Sales Navigator URNs, and the API sells LinkedIn profile/company scrapers. | Conflicts with CLAUDE.md "don't use vendors that [scrape LinkedIn]". At minimum, drop Find People (SPEC §5.1 step 5). | **Open: Olaf to decide** |
+| 1 | **ARIN's RDAP/Whois Terms of Use cover RDAP** and forbid use "as part of a commercial service or product" and "for … marketing research". | SPEC §5.2 step 6 ("else RDAP") is not usable for US IPs in a hosted product. | **Decided 2026-11-09:** RDAP dropped; ipapi.is → PTR → own IP map |
+| 2 | **Icypeas data is LinkedIn-derived.** Find People returns `linkedin.com/in/…` URLs and Sales Navigator URNs, and the API sells LinkedIn profile/company scrapers. | Find People can't be used. | **Decided 2026-11-09:** email finder and verifier only; LinkedIn-derived fields are never stored (rule narrowed in CLAUDE.md) |
 | 3 | **ipapi.is:** keyless calls are now 30/day with a cut-down response. The 1,000/day free tier needs a free key. Data is for internal use only, unless **each user calls with their own key**. | The collector needs a key. **Hosted mode must use a per-workspace (BYO) ipapi.is key**, never a shared instance key. | Decided (fits the BYO-key model) |
-| 4 | **netcup blocks outbound SMTP by default** on servers with its firewall enabled (the "netcup Mail block" policy, removable by the customer). | Reacher depends on it. Live test pending (see the last section). | **Pending: test on the VPS** |
+| 4 | **netcup blocks outbound SMTP by default** on servers with its firewall enabled (the "netcup Mail block" policy, removable by the customer). | Reacher depends on it. | **Pending: test on the VPS.** Reacher is off by default; the Icypeas verifier is the fallback |
 | 5 | **Reacher is now MIT** (since v0.11.9, 2026-10-09). `/v0/check_email` is deprecated; use `/v1/check_email`. `is_reachable` ∈ `safe\|risky\|invalid\|unknown`; catch-all is `smtp.is_catch_all`. | The sidecar raises no licence issue. SPEC §5.1 step 6.3 labels need a mapping (below). | Decided |
-| 6 | **Serper's smallest paid pack is $50 for 50k credits** (valid 6 months). There is no pay-as-you-go option. | SPEC §8.2 "about 600 searches ≈ $1" is wrong. The first paid search costs $50, the whole monthly budget. Stay inside the 2,500 free queries until stream 2 shows ROI. | Decided (budget note) |
+| 6 | **Serper's smallest paid pack is $50 for 50k credits** (valid 6 months). There is no pay-as-you-go option. | The first paid search would cost $50, the whole monthly budget. | **Decided:** the Reddit sub-cap defaults to $0; free queries only, never an automatic pack purchase |
 | 7 | **SEC EDGAR has no domains:** `website` was `""` for all 6 large caps sampled. | EDGAR gives names, SIC, state and officers, but domains must come from elsewhere (the PDL match). | Note for Phase 2 |
-| 8 | **SAM.gov needs a key** even for the public monthly extract. Non-federal users without a role get 10 requests/day. | Use only the monthly extract, and the key goes in instance config. No contact emails at the Public level. | Note for Phase 2 |
+| 8 | **SAM.gov needs a key** even for the public monthly extract. Non-federal users without a role get 10 requests/day. | Optional source: monthly extract only, key in instance config. No contact emails at the Public level. | **Decided:** optional |
 | 9 | **Bluesky Jetstream v2** exists, with an official MIT/Apache client `@bsky/jetstream`. | Use v2 + `@bsky/jetstream` instead of `@skyware/jetstream` (MPL-2.0, v1). | Decided |
-| 10 | **Syften claims no Reddit licence**; it reads Reddit "from the perspective of a logged-out user". | It's doubtful as the SPEC §8.4 Reddit upgrade under our vendor rule. Ask Syften in writing before buying. | Note |
+| 10 | **Syften claims no Reddit licence**; it reads Reddit "from the perspective of a logged-out user". | Not usable as a Reddit source without breaking terms. | **Decided:** removed from the upgrade ladder |
 | 11 | **LeadMagic's cheapest plan is $99/mo.** | It's above the whole $50 budget; the §8.4 "per result" wording understates the entry cost. | Note |
 
 ### Reacher → `emailStatus` mapping (proposed for SPEC §5.1)
@@ -83,7 +83,7 @@ No accounts were created, no keys were used and nothing was spent. Live calls us
 - **Terms:** every ARIN response carries "By using the ARIN RDAP/Whois service, you are agreeing to the RDAP/Whois Terms of Use" (live). The ToU (https://www.arin.net/resources/registry/whois/tou/, effective 9 April 2014, fetched and quoted) says:
   > "You are specifically prohibited from using the Whois Service (i) as part of a commercial service or product … or (ii) for advertising, direct marketing, marketing research or similar purposes."
 
-  Permitted use is "Internet operational or technical research". The ToU allows "prior written authorization" from ARIN. **⇒ Finding #1.** Options are in `decisions.md`.
+  Permitted use is "Internet operational or technical research". The ToU allows "prior written authorization" from ARIN. **⇒ Finding #1.** Decided 2026-11-09: RDAP is not used (`decisions.md`).
 
 ### IPinfo Lite (country and ASN database)
 - **Endpoint & auth**
@@ -289,7 +289,7 @@ No accounts were created, no keys were used and nothing was spent. Live calls us
   - The Public level has **no contact email or phone**.
 
 ### Icypeas (email finder and verifier)
-- **Policy conflict: finding #2.** Find People and the scrapers are LinkedIn-derived. Nothing below is used until Olaf decides.
+- **Decided 2026-11-09 (finding #2):** only `email-search` and `email-verification` are used. Find People, the profile and company scrapers and the URL finders are never called. The adapter keeps only email, certainty and status and drops any LinkedIn-derived field before storage.
 - **Endpoint & auth:**
   - Base `https://app.icypeas.com/api`.
   - `Authorization: <api key>` (raw key, **no `Bearer`**), or signed: `Authorization: <key>:<hex HMAC-SHA1(secret, lower(METHOD+path+timestamp))>` + `X-ROCK-TIMESTAMP`. Signed requests are preferred for stored BYO keys.
@@ -343,7 +343,7 @@ No accounts were created, no keys were used and nothing was spent. Live calls us
 
 | Project | Licence (checked 2026-11-08) | Verdict |
 |---|---|---|
-| Reacher / check-if-email-exists | **MIT** since v0.11.9 (2026-10-09): `LICENSE.md` on master (live), CHANGELOG, `Cargo.toml`. Docker image `reacherhq/backend:v0.11.11`. | Run as a sidecar; add a NOTICE entry if we ship it in compose. |
+| Reacher / check-if-email-exists | **MIT** since v0.11.9 (2026-10-09): `LICENSE.md` on master (live), CHANGELOG, `Cargo.toml`. Docker image `reacherhq/backend:v0.11.11`. | Run as a sidecar behind a config flag (off by default); add a NOTICE entry if we ship it in compose. |
 | OpenMagpie (obris-dev/openmagpie, HEAD 9967975) | **Apache-2.0**; `ee/` is reserved but **doesn't exist**. Python/Django. | We may **port** non-`ee` code with attribution. Only the HN connector, and RSS without its FlareSolverr fallback, fit our rules. Its Reddit (direct `.rss` scraping), X (session cookies) and YouTube (yt-dlp) connectors break CLAUDE.md. |
 | IPinfo Lite data | **CC BY-SA 4.0**, product use allowed with attribution | Download at runtime; never bundle. |
 | DB-IP Lite data | **CC BY 4.0** | Default country/ASN database; link-back attribution in the UI. |
@@ -377,3 +377,10 @@ nc -vz -w5 gmail-smtp-in.l.google.com 25
 | `nc: getaddrinfo … failed` / name resolution error | A DNS problem, not a port result. | Fix DNS and re-run. |
 
 Record the date, the output and the decision in `docs/decisions.md`.
+
+**Running Reacher responsibly (when enabled):**
+- It stays **off by default** (config flag) until this test passes; the Icypeas verifier is the fallback.
+- Keep volume low: one SMTP check at a time per recipient domain, with a per-domain delay (start at one check per domain per minute), and a small daily total.
+- Never retry quickly against the same domain. Treat greylisting as `unknown` and requeue it hours later.
+- The SMTP conversation stops after `RCPT TO`; no mail is sent. Use a real `RCH__HELLO_NAME` and `RCH__FROM_EMAIL` on a domain with matching reverse DNS.
+- High volume from one IP gets it blocklisted and, with it, the VPS's other mail. Low volume protects both us and the receiving servers.

@@ -20,7 +20,7 @@ Collected on 2026-11-08 from vendor pages, GitHub search and web sources. **[unv
 | [sapics/ip-location-db](https://github.com/sapics/ip-location-db) | Prebuilt ASN/geo databases | Mixed source licences |
 | RIPE/APNIC/LACNIC/AFRINIC bulk WHOIS | Sub-allocations of large companies | Free downloads |
 | ARIN bulk WHOIS | US ranges | Agreement limits use to operational/technical research; **not for products** |
-| RDAP, reverse DNS (PTR) | Most specific org record; sometimes a corporate hostname | Free, rate-limited. **[corrected]** ARIN RDAP falls under the same RDAP/Whois Terms of Use, which forbid use "as part of a commercial service or product" and for marketing research. Open decision, see `docs/decisions.md` |
+| RDAP, reverse DNS (PTR) | Most specific org record; sometimes a corporate hostname | Free, rate-limited. **[corrected]** ARIN RDAP falls under the same RDAP/Whois Terms of Use, which forbid use "as part of a commercial service or product" and for marketing research. **RDAP is dropped**; PTR is kept (`docs/decisions.md`) |
 
 ### Paid IP-to-company
 | Vendor | Price | Notes |
@@ -49,7 +49,7 @@ Only demos exist: [loootai/looot-reveal](https://github.com/loootai/looot-reveal
 | X API | Pay-per-use, $0.005 per post read | Variable | Later, narrow queries only |
 | Google Custom Search JSON API | Closed to new customers, ends 2027-01-01 | — | No |
 | LinkedIn, G2, Capterra, Discord, Quora | ToS forbid scraping | — | No |
-| [Syften](https://syften.com/pricing) | $29.95–119.95/mo, API on all plans **[verified]** | — | Upgrade path for Reddit, but it claims no Reddit licence and reads Reddit "from the perspective of a logged-out user"; doubtful under our vendor rule **[resolved: no licence found]** |
+| [Syften](https://syften.com/pricing) | $29.95–119.95/mo, API on all plans **[verified]** | — | Upgrade path for Reddit, but it claims no Reddit licence and reads Reddit "from the perspective of a logged-out user"; **removed from the upgrade ladder** **[resolved: no licence found]** |
 | [F5Bot](https://f5bot.com) | Free / $49.99 Gold | — | Reddit coverage after March 2027 unknown |
 | [Octolens](https://octolens.com/pricing) | From $159/mo | — | Too expensive for now |
 
@@ -71,7 +71,7 @@ Only demos exist: [loootai/looot-reveal](https://github.com/loootai/looot-reveal
 |---|---|---|
 | [PDL free company dataset](https://docs.peopledatalabs.com/docs/free-company-dataset) | 22M+ companies worldwide, name, domain, size, industry, LinkedIn URL | CC BY 4.0, quarterly |
 | SEC EDGAR | US public companies, officers (no domains: `website` is empty) | Free, 10 req/s, declared User-Agent required **[verified]** |
-| SAM.gov, USAspending | Government suppliers, NAICS | Free |
+| SAM.gov, USAspending | Government suppliers, NAICS | Free; SAM.gov needs an API key (10 requests/day), so it is optional and uses the monthly extract only **[verified]** |
 | [Overture Places](https://docs.overturemaps.org/) | Tens of millions of POIs with websites | CDLA-Permissive-2.0 / Apache-2.0 |
 | GLEIF LEI, Wikidata | Entity matching, larger firms | CC0 |
 | Common Crawl web graph, Tranco, Majestic | Domain universe and size proxy | Free; Cloudflare Radar is CC BY-NC (**not allowed**) |
@@ -84,7 +84,7 @@ Only demos exist: [loootai/looot-reveal](https://github.com/loootai/looot-reveal
 ### People and email
 | Vendor | Price | Notes |
 |---|---|---|
-| [Icypeas](https://icypeas.com/pricing) | $19/mo subscription for 1,000 credits; email search charged only when found; Find People 0.02 credits per result; credits don't expire **[verified]** | Fallback, **but its data is LinkedIn-derived**; open decision in `docs/decisions.md` |
+| [Icypeas](https://icypeas.com/pricing) | $19/mo subscription for 1,000 credits; email search charged only when found; Find People 0.02 credits per result; credits don't expire **[verified]** | **Email finder and verifier only.** Find People is not used (it returns LinkedIn profile data), and LinkedIn-derived fields are never stored (`docs/decisions.md`) |
 | [LeadMagic](https://leadmagic.io/pricing) | $0.007–0.02 per found email; failed lookups free; **plans start at $99/mo** **[verified]** | Upgrade path |
 | [Hunter](https://hunter.io/pricing) | $49/mo for 2,000 credits | Mid-priced |
 | [People Data Labs](https://www.peopledatalabs.com/pricing/person) | 100 free credits/mo with emails hidden; about $0.28/record | Too expensive per record |
