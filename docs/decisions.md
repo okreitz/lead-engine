@@ -110,3 +110,6 @@ SPEC §6's board is per account (`Account.stage`). Deals keep their own stage on
 
 ## 2026-11-09: CSV import is per-row, US-only, and exports neutralise formulas
 Each row runs in its own savepoint, so bad rows are reported (row number + reason) without undoing good ones. Accounts need an explicit US country; contacts and deals match accounts by domain. Exports leave out suppressed records, prefix cells starting with `= + - @` to stop spreadsheet formula injection, are audited, and sit behind the CAN-SPAM checklist in the UI.
+
+## 2026-11-09: Coolify deploy: no published ports, required secrets, a login gate on every page
+`deploy/compose.yaml` targets Coolify's Docker Compose build pack: services only `expose` ports and Coolify's proxy routes the domains (web :4500 now, collector :4511 in Phase 3; the API :4501 is never routed). `LE_MASTER_KEY` and `LE_SETUP_TOKEN` use `${VAR:?}`, so Coolify won't deploy without them. Local runs add `deploy/compose.local.yaml`, which publishes on 127.0.0.1. `apps/web/src/proxy.ts` redirects every page without a session cookie to `/login`; the engine still validates every API call. Steps are in `deploy/coolify.md`.
