@@ -12,6 +12,7 @@ import { registerCrmRoutes } from './routes/crm.ts';
 import { registerOfferRoutes } from './routes/offers.ts';
 import { registerSummaryRoutes } from './routes/summary.ts';
 import { registerTodayRoutes } from './routes/today.ts';
+import { registerRoiRoutes } from './routes/roi.ts';
 import { registerViewRoutes } from './routes/views.ts';
 import { registerWorkspaceRoutes } from './routes/workspaces.ts';
 
@@ -45,6 +46,7 @@ export function buildApi(ctx: AppContext, options: ApiOptions = {}): FastifyInst
     registerSummaryRoutes(scoped, ctx);
     registerTodayRoutes(scoped, ctx);
     registerViewRoutes(scoped, ctx);
+    registerRoiRoutes(scoped, ctx);
   });
 
   app.setErrorHandler((error, request, reply) => {

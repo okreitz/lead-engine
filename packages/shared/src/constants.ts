@@ -52,3 +52,15 @@ export type Stream = (typeof STREAMS)[number];
 /** Session cookie and CSRF header names shared by the web proxy and the engine. */
 export const SESSION_COOKIE = 'le_session';
 export const CSRF_HEADER = 'x-csrf-token';
+
+/**
+ * Paid actions ask for confirmation only when the estimate is over $1 or over 10% of what
+ * is left of the month's budget (docs/ui.md §1.3); otherwise the estimate is just shown.
+ */
+export const COST_CONFIRM_USD = 1;
+export const COST_CONFIRM_SHARE_OF_REMAINING = 0.1;
+export function needsCostConfirm(estimateUsd: number, remainingUsd: number): boolean {
+  return (
+    estimateUsd > COST_CONFIRM_USD || estimateUsd > COST_CONFIRM_SHARE_OF_REMAINING * remainingUsd
+  );
+}

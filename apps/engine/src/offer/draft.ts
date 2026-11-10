@@ -2,7 +2,7 @@
  * Offer profile drafting (SPEC §4.1): fetch the homepage plus up to 5 key pages, then ask
  * the LLM for a schema-validated draft. Runs as a job so budget stops make it wait.
  */
-import { offerDraftSchema } from '@le/shared';
+import { offerDraftLlmSchema, type ReviewField } from '@le/shared';
 import { and, eq } from 'drizzle-orm';
 import { Crawler, CrawlError, type CrawledPage } from '../crawler/crawler.ts';
 import { selectKeyPages } from '../crawler/extract.ts';
@@ -27,10 +27,14 @@ From a company's website text, describe what it sells and to whom:
   kind is seeking ("looking for a tool to …"), alternative ("alternative to X"), pain (a
   problem statement) or recommendation ("recommend a …"). Add negative keywords that filter
   out false positives (jobs, students, self-promotion, unrelated meanings).
+- rationale: for each field above, one sentence on why you chose it, citing the page it came
+  from (field names: name, summary, valueProps, competitors, icp.industries, icp.naics,
+  icp.employeeRange, icp.revenueRange, icp.states, icp.techUses, icp.techAvoids, icp.mustHave,
+  icp.exclude, personas, intentPhrases).
 Base everything on the website text and the user's notes. Do not invent customers or numbers.`;
 
 export const MAX_KEY_PAGES = 5;
-const PAGE_CHARS = 8_000;
+export const PAGE_CHARS = 8_000;
 
 export function buildOfferPrompt(
   websiteUrl: string,
@@ -106,7 +110,7 @@ export function offerDraftHandler(getCrawler: () => Crawler): JobHandler {
         jobId: job.id,
         system: OFFER_SYSTEM,
         prompt: buildOfferPrompt(row.offer.websiteUrl, pages, input),
-        schema: offerDraftSchema,
+        schema: offerDraftLlmSchema,
         maxOutputTokens: 6_000,
         // Retries after invalid output ask again instead of re-reading a cached answer.
         refresh: job.attempts > 1,
@@ -123,12 +127,18 @@ export function offerDraftHandler(getCrawler: () => Crawler): JobHandler {
       }
       throw err;
     }
+    const { rationale, ...data } = draft;
+    const why: Partial<Record<ReviewField, string>> = {};
+    for (const r of rationale) why[r.field] = r.why;
     const now = ctx.now();
     ctx.db
       .update(offerVersions)
       .set({
         status: 'draft',
-        data: draft,
+        data,
+        rationale: why,
+        // An empty review means every field still needs a decision before approval.
+        review: {},
         error: null,
         pages: pages.map((p) => ({ url: p.url, title: p.title })),
         updatedAt: now,
@@ -137,7 +147,7 @@ export function offerDraftHandler(getCrawler: () => Crawler): JobHandler {
       .run();
     ctx.db
       .update(offers)
-      .set({ name: row.offer.name || draft.name, updatedAt: now })
+      .set({ name: row.offer.name || data.name, updatedAt: now })
       .where(eq(offers.id, row.offer.id))
       .run();
     return { pages: pages.length };

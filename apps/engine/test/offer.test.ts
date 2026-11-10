@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { offerDraftSchema } from '@le/shared';
+import { offerDraftLlmSchema, offerDraftSchema, REVIEW_FIELDS } from '@le/shared';
 import { costLedger, jobs, offerVersions, workspaces } from '../src/db/schema.ts';
 import { JobRunner } from '../src/jobs/queue.ts';
 import { jobHandlers } from '../src/jobs/handlers.ts';
@@ -44,6 +44,19 @@ export function draft(overrides: object = {}) {
   };
 }
 
+/** What the model returns: the draft plus a "why" per field. */
+export function llmDraft(overrides: object = {}) {
+  return {
+    ...draft(overrides),
+    rationale: [
+      { field: 'summary', why: 'The homepage says it sells rockets to logistics teams.' },
+      { field: 'icp.industries', why: 'Customers named on the homepage are carriers.' },
+    ],
+  };
+}
+
+export const ACCEPT_ALL = Object.fromEntries(REVIEW_FIELDS.map((f) => [f, 'accepted']));
+
 const SITE = {
   'https://acme.com/robots.txt': { body: 'User-agent: *\nAllow: /\n', type: 'text/plain' },
   'https://acme.com/': {
@@ -53,7 +66,7 @@ const SITE = {
   'https://acme.com/about': { status: 500 },
 };
 
-async function setup(respond: () => unknown = () => draft()) {
+async function setup(respond: () => unknown = () => llmDraft()) {
   const ctx = makeCtx({}, () => Date.UTC(2026, 10, 9, 12));
   const web = fakeWeb(SITE);
   const llm = fakeLlm(respond);
@@ -90,16 +103,39 @@ describe('offer profile', () => {
     expect(req.prompt).toContain('mid-size carriers');
     expect(req.prompt.match(/<\/untrusted_data>/g)).toHaveLength(3); // homepage, pricing, notes
 
-    // Edit the draft in place, then approve it.
+    // The rationale is stored apart from the profile, keyed by field.
+    expect(detail.versions[0].rationale).toMatchObject({
+      summary: expect.stringMatching(/rockets/),
+    });
+    expect(detail.versions[0].data.rationale).toBeUndefined();
+    expect(detail.versions[0].review).toEqual({});
+
+    // Edit the draft in place. Approval waits until every drafted field has a decision.
     const edited = draft({ summary: 'Edited summary.' });
     expect(
-      (await c.send('PUT', `/api/v1/offers/${created.body.id}/versions/1`, { data: edited })).body,
+      (
+        await c.send('PUT', `/api/v1/offers/${created.body.id}/versions/1`, {
+          data: edited,
+          review: { summary: 'edited', name: 'accepted' },
+        })
+      ).body,
     ).toEqual({ version: 1, created: false });
+    const early = await c.send('POST', `/api/v1/offers/${created.body.id}/versions/1/approve`);
+    expect(early.status).toBe(409);
+    expect(early.body.error).toBe('unreviewed');
+    expect(early.body.details).toHaveLength(REVIEW_FIELDS.length - 2);
+    await c.send('PUT', `/api/v1/offers/${created.body.id}/versions/1`, {
+      data: edited,
+      review: { ...ACCEPT_ALL, summary: 'edited' },
+    });
     expect(
       (await c.send('POST', `/api/v1/offers/${created.body.id}/versions/1/approve`)).status,
     ).toBe(200);
+    detail = (await c.get(`/api/v1/offers/${created.body.id}`)).body;
+    expect(detail.versions[0].review.summary).toBe('edited');
 
-    // Editing an approved version creates version 2; approving it supersedes version 1.
+    // Editing an approved version creates version 2 (a human edit, no review needed);
+    // approving it supersedes version 1.
     const v2 = await c.send('PUT', `/api/v1/offers/${created.body.id}/versions/1`, {
       data: draft({ summary: 'Second.' }),
     });
@@ -167,8 +203,10 @@ describe('offer profile', () => {
     expect(ctx.db.select().from(costLedger).all()).toHaveLength(2); // both attempts metered
   });
 
-  it('the draft schema requires 20–40 intent phrases', () => {
+  it('the draft schema requires 20–40 intent phrases and a rationale', () => {
     expect(offerDraftSchema.safeParse(draft()).success).toBe(true);
+    expect(offerDraftLlmSchema.safeParse(llmDraft()).success).toBe(true);
+    expect(offerDraftLlmSchema.safeParse(draft()).success).toBe(false);
     expect(
       offerDraftSchema.safeParse(draft({ intentPhrases: draft().intentPhrases.slice(0, 5) }))
         .success,
