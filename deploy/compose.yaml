@@ -1,10 +1,13 @@
-# Lead Engine stack for Coolify (or `docker compose -f deploy/compose.yaml up --build`).
+# Lead Engine stack: Coolify's Docker Compose build pack, or locally with
+#   docker compose -f deploy/compose.yaml -f deploy/compose.local.yaml up --build
 #
-# Inside the containers the services bind 0.0.0.0, which Docker needs; on the host every
-# port is published on 127.0.0.1 only. On the VPS, Coolify's proxy routes HTTPS:
-#   - the collector domain -> engine:4511 (the only public, unauthenticated surface)
-#   - the app domain       -> web:4500 (behind login), or reach it over Tailscale only
-# The API (:4501) is never routed publicly.
+# No ports are published here; Coolify's proxy routes the domains you assign
+# (see deploy/coolify.md):
+#   - app domain       -> web:4500    (login required on every page and API route)
+#   - collector domain -> engine:4511 (Phase 3; the only public, unauthenticated surface)
+# The engine API (:4501) is reached only by the web container over the internal network.
+#
+# `${VAR:?}` marks a variable Coolify requires before it deploys. Never commit values.
 name: lead-engine
 
 services:
@@ -17,13 +20,31 @@ services:
     restart: unless-stopped
     environment:
       LE_LOG_LEVEL: ${LE_LOG_LEVEL:-info}
-      LE_MASTER_KEY: ${LE_MASTER_KEY:-}
+      # 32 bytes, base64 (`openssl rand -base64 32`). Encrypts workspace provider keys.
+      LE_MASTER_KEY: ${LE_MASTER_KEY:?}
+      # Needed once, to create the first user (the container binds 0.0.0.0).
+      LE_SETUP_TOKEN: ${LE_SETUP_TOKEN:?}
+      LE_COOKIE_SECURE: ${LE_COOKIE_SECURE:-auto}
+      # Optional instance fallback for the anthropic-api adapter; workspace keys win.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       - le-data:/data
-    ports:
-      - '127.0.0.1:4501:4501'
-      - '127.0.0.1:4511:4511'
+    expose:
+      - '4501'
+      - '4511'
     mem_limit: 256m
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4501/api/v1/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
 
   web:
     build:
@@ -34,11 +55,25 @@ services:
     restart: unless-stopped
     environment:
       LE_ENGINE_URL: http://engine:4501
-    ports:
-      - '127.0.0.1:4500:4500'
+    expose:
+      - '4500'
     depends_on:
-      - engine
+      engine:
+        condition: service_healthy
     mem_limit: 256m
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:4500/login').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
 
 volumes:
+  # SQLite database (WAL) and later the .mmdb files. Back this volume up.
   le-data:

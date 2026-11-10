@@ -35,6 +35,11 @@ export default tseslint.config(
     },
   },
   {
+    // Tests read loosely-typed JSON responses.
+    files: ['**/test/**/*.ts'],
+    rules: { '@typescript-eslint/no-explicit-any': 'off' },
+  },
+  {
     files: ['apps/engine/src/commands.ts'],
     rules: { 'no-restricted-imports': 'off' },
   },
