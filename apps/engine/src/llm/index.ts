@@ -71,6 +71,8 @@ export interface LlmTask<S extends z.ZodObject> {
   maxOutputTokens?: number;
   model?: string;
   refresh?: boolean;
+  /** The record the call is for, linked from the ledger. */
+  ledgerEntity?: { type: string; id: string };
 }
 
 export async function runLlm<S extends z.ZodObject>(
@@ -101,6 +103,7 @@ export async function runLlm<S extends z.ZodObject>(
     stream: task.stream,
     ...(task.jobId ? { jobId: task.jobId } : {}),
     ...(task.refresh ? { refresh: true } : {}),
+    ...(task.ledgerEntity ? { ledgerEntity: task.ledgerEntity } : {}),
     accept: (r) => task.schema.safeParse(r.output).success,
   });
   if (res.status !== 'ok')

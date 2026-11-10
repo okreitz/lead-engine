@@ -1,20 +1,46 @@
 'use client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useState, type FormEvent } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState, type FormEvent } from 'react';
 import { ConfirmButton } from '@/components/confirm';
+import { BudgetSettings } from '@/components/settings/budget-settings';
+import { SuppressionList } from '@/components/settings/suppression-list';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { api, errorMessage, fmtDate } from '@/lib/api';
 import { useMe } from '@/lib/me';
 
+const TABS = [
+  { key: 'general', label: 'General' },
+  { key: 'keys', label: 'Provider keys' },
+  { key: 'budget', label: 'Budget' },
+  { key: 'suppression', label: 'Suppression' },
+  { key: 'members', label: 'Members' },
+  { key: 'tokens', label: 'API tokens', ownerOnly: true },
+  { key: 'danger', label: 'Danger zone', ownerOnly: true },
+] as const;
+type TabKey = (typeof TABS)[number]['key'];
+
+/** Settings as tabs (docs/ui.md §3.9). Sites & snippet arrives with stream 1 (Phase 3). */
 export default function SettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsTabs />
+    </Suspense>
+  );
+}
+
+function SettingsTabs() {
   const me = useMe();
+  const params = useSearchParams();
+  const router = useRouter();
   const ws = me.data?.workspace;
   const owner = me.data?.role === 'owner';
   if (!ws) return null;
+  const visible = TABS.filter((t) => owner || !('ownerOnly' in t && t.ownerOnly));
+  const tab = (visible.find((t) => t.key === params.get('tab'))?.key ?? 'general') as TabKey;
   return (
     <div className="flex max-w-3xl flex-col gap-6">
       <div className="flex items-baseline justify-between">
@@ -25,12 +51,36 @@ export default function SettingsPage() {
           </Link>
         ) : null}
       </div>
-      <WorkspaceForm disabled={!owner} />
-      <ProviderKeys disabled={!owner} />
-      <Members disabled={!owner} />
-      {owner ? <Tokens /> : null}
-      <Password />
-      {owner ? <DangerZone name={ws.name} /> : null}
+      <div role="tablist" aria-label="Settings" className="flex flex-wrap gap-1 border-b">
+        {visible.map((t) => (
+          <button
+            key={t.key}
+            role="tab"
+            type="button"
+            aria-selected={tab === t.key}
+            onClick={() => router.replace(`/settings?tab=${t.key}`, { scroll: false })}
+            className={
+              tab === t.key
+                ? 'border-foreground -mb-px border-b-2 px-3 py-2 text-sm font-medium'
+                : 'text-muted-foreground hover:text-foreground px-3 py-2 text-sm'
+            }
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+      {tab === 'general' ? (
+        <>
+          <WorkspaceForm disabled={!owner} />
+          <Password />
+        </>
+      ) : null}
+      {tab === 'keys' ? <ProviderKeys disabled={!owner} /> : null}
+      {tab === 'budget' ? <BudgetSettings disabled={!owner} /> : null}
+      {tab === 'suppression' ? <SuppressionList /> : null}
+      {tab === 'members' ? <Members disabled={!owner} /> : null}
+      {tab === 'tokens' && owner ? <Tokens /> : null}
+      {tab === 'danger' && owner ? <DangerZone name={ws.name} /> : null}
     </div>
   );
 }
@@ -51,7 +101,6 @@ function WorkspaceForm({ disabled }: { disabled: boolean }) {
     const f = new FormData(e.currentTarget);
     save.mutate({
       name: String(f.get('name')),
-      monthlyBudgetUsd: Number(f.get('budget')),
       timezone: String(f.get('timezone')),
       settings: {
         llmAdapter: String(f.get('llmAdapter')),
@@ -66,17 +115,6 @@ function WorkspaceForm({ disabled }: { disabled: boolean }) {
         <Label>
           Name
           <Input name="name" defaultValue={ws.name} disabled={disabled} required />
-        </Label>
-        <Label>
-          Monthly budget (USD)
-          <Input
-            name="budget"
-            type="number"
-            min={0}
-            step="1"
-            defaultValue={ws.monthlyBudgetUsd}
-            disabled={disabled}
-          />
         </Label>
         <Label>
           Timezone
@@ -120,7 +158,12 @@ function WorkspaceForm({ disabled }: { disabled: boolean }) {
 
 interface ProviderKeyList {
   masterKeyConfigured: boolean;
-  providers: { provider: string; configured: boolean; createdAt: number | null }[];
+  providers: {
+    provider: string;
+    configured: boolean;
+    createdAt: number | null;
+    lastUsedAt: number | null;
+  }[];
 }
 
 function ProviderKeys({ disabled }: { disabled: boolean }) {
@@ -146,7 +189,12 @@ function ProviderKeys({ disabled }: { disabled: boolean }) {
           <li key={p.provider} className="flex items-center gap-3">
             <span className="w-24 font-mono text-sm">{p.provider}</span>
             {p.configured ? (
-              <Badge tone="ok">set {fmtDate(p.createdAt)}</Badge>
+              <span className="flex flex-col">
+                <Badge tone="ok">•••• set {fmtDate(p.createdAt)}</Badge>
+                <span className="text-muted-foreground text-xs">
+                  last used {p.lastUsedAt ? fmtDate(p.lastUsedAt) : 'never'}
+                </span>
+              </span>
             ) : (
               <Badge tone="muted">not set</Badge>
             )}

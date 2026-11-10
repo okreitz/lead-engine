@@ -110,6 +110,7 @@ export function offerDraftHandler(getCrawler: () => Crawler): JobHandler {
         maxOutputTokens: 6_000,
         // Retries after invalid output ask again instead of re-reading a cached answer.
         refresh: job.attempts > 1,
+        ledgerEntity: { type: 'offer_version', id: versionId },
       });
     } catch (err) {
       // Budget stops propagate (the job waits). Model failures end the draft on the last try.

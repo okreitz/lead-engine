@@ -294,7 +294,11 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: AppContext): 
   app.get('/api/v1/provider-keys', async (request) => {
     const { workspaceId } = workspaceOf(request);
     const rows = ctx.db
-      .select({ provider: providerKeys.provider, createdAt: providerKeys.createdAt })
+      .select({
+        provider: providerKeys.provider,
+        createdAt: providerKeys.createdAt,
+        lastUsedAt: providerKeys.lastUsedAt,
+      })
       .from(providerKeys)
       .where(eq(providerKeys.workspaceId, workspaceId))
       .all();
@@ -304,6 +308,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: AppContext): 
         provider,
         configured: rows.some((r) => r.provider === provider),
         createdAt: rows.find((r) => r.provider === provider)?.createdAt ?? null,
+        lastUsedAt: rows.find((r) => r.provider === provider)?.lastUsedAt ?? null,
       })),
     };
   });

@@ -22,6 +22,13 @@
       "when": 1794260810558,
       "tag": "0002_companies_fts",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794307622498,
+      "tag": "0003_ui_followup",
+      "breakpoints": true
     }
   ]
 }

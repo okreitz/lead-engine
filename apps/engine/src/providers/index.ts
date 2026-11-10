@@ -84,7 +84,17 @@ export function getProviderKey(
     .from(providerKeys)
     .where(and(eq(providerKeys.workspaceId, workspaceId), eq(providerKeys.provider, provider)))
     .get();
-  if (row) return decryptSecret(ctx.config.masterKey, workspaceId, provider, row.encryptedKey);
+  if (row) {
+    const now = ctx.now();
+    if (!row.lastUsedAt || now - row.lastUsedAt > 60_000) {
+      ctx.db
+        .update(providerKeys)
+        .set({ lastUsedAt: now })
+        .where(and(eq(providerKeys.workspaceId, workspaceId), eq(providerKeys.provider, provider)))
+        .run();
+    }
+    return decryptSecret(ctx.config.masterKey, workspaceId, provider, row.encryptedKey);
+  }
   if (provider === 'anthropic') return ctx.config.anthropicApiKey;
   return null;
 }
@@ -155,6 +165,8 @@ export async function callProvider<I, O>(
         free,
         stream: opts.stream,
         jobId: opts.jobId ?? null,
+        entityType: opts.ledgerEntity?.type ?? opts.target?.entity ?? null,
+        entityId: opts.ledgerEntity?.id ?? opts.target?.entityId ?? null,
         meta: meta ?? null,
         at: ctx.now(),
       })
