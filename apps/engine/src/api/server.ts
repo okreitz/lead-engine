@@ -7,6 +7,7 @@ import { registerAuthHook } from './auth-hook.ts';
 import type { AppContext } from './context.ts';
 import { HttpError } from './http.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
+import { registerBudgetRoutes } from './routes/budget.ts';
 import { registerWorkspaceRoutes } from './routes/workspaces.ts';
 
 export interface ApiOptions {
@@ -33,6 +34,7 @@ export function buildApi(ctx: AppContext, options: ApiOptions = {}): FastifyInst
     });
     registerAuthRoutes(scoped, ctx);
     registerWorkspaceRoutes(scoped, ctx);
+    registerBudgetRoutes(scoped, ctx);
   });
 
   app.setErrorHandler((error, request, reply) => {

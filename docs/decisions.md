@@ -87,5 +87,20 @@ Format `v1.<iv>.<tag>.<ct>`. Binding the ciphertext to `workspaceId:provider` st
 ## 2026-11-09: No `linkedinUrl` columns
 SPEC §3 lists `linkedinUrl` on Company and Contact. Since we never store LinkedIn-derived data, the columns don't exist, so nothing can be written to them by mistake.
 
+## 2026-11-09: One provider pipeline for every paid call, LLM included
+`providers/index.ts` runs suppression → per-workspace cache → free quota or budget → call → `CostLedger` → `FieldSource`. LLM calls are the `llm` operation of the same pipeline (`llm/index.ts`), so budget, cache and metering are identical for data providers and models. Failed calls that still cost money (e.g. the CLI's post-spend `--max-budget-usd` stop) are metered too. Every response passes `stripLinkedIn()` before it is cached, returned or stored.
+
+## 2026-11-09: Budget months are UTC calendar months; checks use an upper-bound estimate
+A paid call is refused when the month's spend is at the budget or when spend plus the call's worst-case estimate would pass it, so a single call can't overshoot. At 80% the UI warns; at 100% jobs move to `waiting` with the reason and resume at the next month, or immediately when an owner raises the budget or adds a key. Jobs run one at a time per process, so two checks can't race.
+
+## 2026-11-09: Per-stream sub-caps are off by default; provider caps are always on
+SPEC §8.1 calls the stream sub-caps optional. They are stored with the SPEC defaults (60/20/10/10%) and enforced only when `settings.enforceSubCaps` is true. Provider caps such as Serper's $0 paid cap are always enforced, so Serper never goes past its free queries.
+
+## 2026-11-09: `anthropic-api` uses `messages.create` with `output_config.format`, then zod
+The SDK's `parse()` throws before we can read usage on truncated output. We call `create` with a JSON-schema format from the zod schema at `effort: low`, check `stop_reason` (refusal, max_tokens), record the cost, then JSON-parse and zod-validate. Unknown models are refused because their price is unknown. SDK 1.x sends the key as `Authorization: Bearer`.
+
+## 2026-11-09: Untrusted text goes in escaped `<untrusted_data>` blocks
+`llm/prompt.ts` strips control and bidi characters, neutralises any `<untrusted_data`/`</untrusted_data` inside the data, sanitises attributes and caps each block at 12k characters. The system prompt always carries the "data, not instructions" rules. A test checks that the CLI adapter's flags match `docs/claude-cli.md` exactly.
+
 ## 2026-11-09: Coolify deploy: no published ports, required secrets, a login gate on every page
 `deploy/compose.yaml` targets Coolify's Docker Compose build pack: services only `expose` ports and Coolify's proxy routes the domains (web :4500 now, collector :4511 in Phase 3; the API :4501 is never routed). `LE_MASTER_KEY` and `LE_SETUP_TOKEN` use `${VAR:?}`, so Coolify won't deploy without them. Local runs add `deploy/compose.local.yaml`, which publishes on 127.0.0.1. `apps/web/src/proxy.ts` redirects every page without a session cookie to `/login`; the engine still validates every API call. Steps are in `deploy/coolify.md`.
