@@ -1,194 +1,303 @@
 'use client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { Suspense, useMemo, useState } from 'react';
+import { AccountsTable } from '@/components/accounts-table';
+import { EmptyState, SkeletonRows } from '@/components/blocks/empty-state';
+import { ConfirmButton } from '@/components/confirm';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
-import { Input, Label, NativeSelect } from '@/components/ui/input';
+import { Input, Label } from '@/components/ui/input';
+import { Popover } from '@/components/ui/popover';
+import { ViewBar } from '@/components/view-bar';
 import { api, errorMessage } from '@/lib/api';
-import { score, type AccountRow } from '@/lib/crm';
+import type { AccountRow } from '@/lib/crm';
+import { useKeys } from '@/lib/keys';
 import { useMe } from '@/lib/me';
+import { useSheet } from '@/lib/sheet';
+import { apiQuery, useViewState } from '@/lib/views';
 
 export default function AccountsPage() {
+  return (
+    <Suspense fallback={<SkeletonRows rows={8} />}>
+      <Accounts />
+    </Suspense>
+  );
+}
+
+/**
+ * Accounts (docs/ui.md §3.2): saved-view tabs, filter chips, a virtualized table with the
+ * priority cell, a bulk bar on selection, and J/K/X/Space/Enter/S keys. View state is in the URL.
+ */
+function Accounts() {
+  const qc = useQueryClient();
+  const router = useRouter();
+  const sheet = useSheet();
   const stages = useMe().data?.workspace?.settings.stages ?? [];
-  const [q, setQ] = useState('');
-  const [stage, setStage] = useState('');
-  const [stream, setStream] = useState('');
-  const [minFit, setMinFit] = useState('');
-  const [sort, setSort] = useState('priority');
-  const params = new URLSearchParams({ sort });
-  if (q) params.set('q', q);
-  if (stage) params.set('stage', stage);
-  if (stream) params.set('stream', stream);
-  if (minFit) params.set('minFit', minFit);
+  const { state, set, views } = useViewState();
+  const query = apiQuery(state);
   const list = useQuery({
-    queryKey: ['accounts', params.toString()],
-    queryFn: () => api<AccountRow[]>(`/accounts?${params}`),
+    queryKey: ['accounts', query],
+    queryFn: () => api<AccountRow[]>(`/accounts?limit=5000&${query}`),
+    placeholderData: (prev) => prev,
+  });
+  const rows = useMemo(() => list.data ?? [], [list.data]);
+  const [rawSelected, setSelected] = useState<Set<string>>(new Set());
+  const [cursor, setCursor] = useState(-1);
+  const [stageMenu, setStageMenu] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Only selections still in the list count (filters can hide selected rows).
+  const rowIds = new Set(rows.map((r) => r.id));
+  const selected = new Set([...rawSelected].filter((id) => rowIds.has(id)));
+
+  const targetIds = () =>
+    selected.size ? [...selected] : cursor >= 0 && rows[cursor] ? [rows[cursor]!.id] : [];
+
+  async function bulk(action: 'stage' | 'archive' | 'suppress', stage?: string) {
+    const ids = targetIds();
+    if (!ids.length) return;
+    try {
+      setError(null);
+      await api('/accounts/bulk', {
+        method: 'POST',
+        body: { ids, action, ...(stage ? { stage } : {}) },
+      });
+      setSelected(new Set());
+      await qc.invalidateQueries({ queryKey: ['accounts'] });
+      await qc.invalidateQueries({ queryKey: ['pipeline'] });
+      await qc.invalidateQueries({ queryKey: ['today'] });
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
+  useKeys({
+    j: () => setCursor((c) => Math.min(rows.length - 1, c + 1)),
+    k: () => setCursor((c) => Math.max(0, c - 1)),
+    x: () => {
+      const r = rows[cursor];
+      if (!r) return;
+      setSelected((prev) => {
+        const next = new Set(prev);
+        if (next.has(r.id)) next.delete(r.id);
+        else next.add(r.id);
+        return next;
+      });
+    },
+    ' ': () => {
+      const r = rows[cursor];
+      if (r) sheet.open(r.id);
+    },
+    Enter: () => {
+      const r = rows[cursor];
+      if (r) router.push(`/accounts/${r.id}`);
+    },
+    s: () => {
+      if (targetIds().length) setStageMenu(true);
+    },
   });
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold tracking-tight">Accounts</h1>
         <div className="flex gap-2">
-          <Button variant="outline" asChild>
+          <Button variant="outline" size="sm" asChild>
             <Link href="/data">Import / export</Link>
           </Button>
           <NewAccount />
         </div>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <Input
-          placeholder="Search name or domain"
-          className="w-64"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-        />
-        <NativeSelect value={stage} onChange={(e) => setStage(e.target.value)} aria-label="Stage">
-          <option value="">All stages</option>
-          {stages.map((s) => (
-            <option key={s}>{s}</option>
-          ))}
-        </NativeSelect>
-        <NativeSelect
-          value={stream}
-          onChange={(e) => setStream(e.target.value)}
-          aria-label="Stream"
+      <ViewBar state={state} set={set} views={views.data ?? []} />
+
+      {selected.size || stageMenu ? (
+        <div
+          className="bg-foreground text-background flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-sm"
+          role="toolbar"
+          aria-label="Bulk actions"
         >
-          <option value="">All streams</option>
-          <option value="personas">Persona fit</option>
-          <option value="visits">Website visits</option>
-          <option value="conversations">Conversations</option>
-          <option value="manual">Manual</option>
-        </NativeSelect>
-        <Input
-          type="number"
-          min={0}
-          max={100}
-          placeholder="Min fit"
-          className="w-28"
-          value={minFit}
-          onChange={(e) => setMinFit(e.target.value)}
-        />
-        <NativeSelect value={sort} onChange={(e) => setSort(e.target.value)} aria-label="Sort">
-          <option value="priority">Priority</option>
-          <option value="fit">Fit</option>
-          <option value="intent">Intent</option>
-          <option value="updated">Recently updated</option>
-          <option value="name">Name</option>
-        </NativeSelect>
-      </div>
-      <table className="w-full text-sm">
-        <thead className="text-muted-foreground text-left">
-          <tr>
-            <th className="py-2">Company</th>
-            <th>Stage</th>
-            <th className="text-right">Priority</th>
-            <th className="text-right">Fit</th>
-            <th className="text-right">Intent</th>
-            <th>Source</th>
-            <th>Industry</th>
-            <th>State</th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.data?.map((a) => (
-            <tr key={a.id} className="hover:bg-muted/40 border-t">
-              <td className="py-2">
-                <Link href={`/accounts/${a.id}`} className="font-medium hover:underline">
-                  {a.name}
-                </Link>
-                <div className="text-muted-foreground text-xs">{a.domain}</div>
-              </td>
-              <td>
-                <Badge tone="muted">{a.stage}</Badge>
-              </td>
-              <td className="text-right font-medium">{score(a.priority)}</td>
-              <td className="text-right">{score(a.fitScore)}</td>
-              <td className="text-right">{score(a.intentScore)}</td>
-              <td>{a.firstSource}</td>
-              <td className="max-w-48 truncate">{a.industry ?? '—'}</td>
-              <td>{a.state ?? '—'}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {list.data?.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No accounts match.</p>
+          <span className="font-medium">{selected.size || 1} selected</span>
+          <Popover
+            open={stageMenu}
+            onOpenChange={setStageMenu}
+            trigger={
+              <Button size="sm" variant="secondary">
+                Set stage ▾ <kbd className="text-xs opacity-60">S</kbd>
+              </Button>
+            }
+          >
+            <div className="flex flex-col">
+              {stages.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="hover:bg-accent rounded px-2 py-1 text-left"
+                  onClick={() => {
+                    setStageMenu(false);
+                    void bulk('stage', s);
+                  }}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          </Popover>
+          <Button size="sm" variant="secondary" onClick={() => void bulk('archive')}>
+            Archive
+          </Button>
+          <ConfirmButton
+            trigger={
+              <Button size="sm" variant="secondary">
+                Suppress
+              </Button>
+            }
+            title={`Suppress ${selected.size || 1} account domain${selected.size === 1 ? '' : 's'}?`}
+            description="Adds each company's domain to the suppression list. The accounts, their contacts and deals disappear from every view and export, and are never enriched again."
+            confirmLabel="Suppress"
+            onConfirm={() => bulk('suppress')}
+          />
+          <Button size="sm" variant="secondary" asChild>
+            <a href={`/api/v1/export/accounts.csv?ids=${targetIds().join(',')}`} download>
+              Export CSV
+            </a>
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-background ml-auto"
+            onClick={() => setSelected(new Set())}
+          >
+            Clear
+          </Button>
+        </div>
       ) : null}
+      {error ? <p className="text-destructive text-sm">{error}</p> : null}
+
+      {!list.data ? (
+        <SkeletonRows rows={10} />
+      ) : rows.length === 0 ? (
+        state.view !== 'all' ||
+        state.q ||
+        state.stage.length ||
+        state.stream.length ||
+        state.fit ||
+        state.intent ? (
+          <EmptyState
+            title="No accounts match these filters"
+            action={
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  set({ view: 'all', q: '', stage: [], stream: [], fit: '', intent: '' })
+                }
+              >
+                Clear filters
+              </Button>
+            }
+          />
+        ) : (
+          <EmptyState title="No accounts yet" next="Import accounts from CSV" href="/data">
+            Or add one with &ldquo;Add account&rdquo;. Persona fit (Phase 2) will create accounts
+            from your approved offer profile.
+          </EmptyState>
+        )
+      ) : (
+        <AccountsTable
+          rows={rows}
+          columns={state.cols}
+          selected={selected}
+          onToggle={(id) =>
+            setSelected((prev) => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            })
+          }
+          onToggleAll={(all) => setSelected(all ? new Set(rows.map((r) => r.id)) : new Set())}
+          cursor={cursor}
+          onCursor={setCursor}
+          onPreview={(id) => sheet.open(id)}
+          onOpen={(id) => router.push(`/accounts/${id}`)}
+        />
+      )}
+      <p className="text-muted-foreground text-xs">
+        <kbd>J</kbd>/<kbd>K</kbd> move · <kbd>X</kbd> select · <kbd>Space</kbd> preview ·{' '}
+        <kbd>Enter</kbd> open · <kbd>S</kbd> set stage
+      </p>
     </div>
   );
 }
 
+/** Inline (non-modal) add-account form; US companies only. */
 function NewAccount() {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button>Add account</Button>
-      </DialogTrigger>
-      <DialogContent title="Add account" description="US companies only.">
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            const get = (k: string) => String(f.get(k) ?? '').trim() || undefined;
-            try {
-              setError(null);
-              await api('/accounts', {
-                method: 'POST',
-                body: {
-                  domain: get('domain'),
-                  name: get('name'),
-                  country: 'US',
-                  state: get('state'),
-                  city: get('city'),
-                  industry: get('industry'),
-                  sizeRange: get('sizeRange'),
-                },
-              });
-              await qc.invalidateQueries({ queryKey: ['accounts'] });
-              setOpen(false);
-            } catch (err) {
-              setError(errorMessage(err));
-            }
-          }}
-        >
+    <Popover
+      open={open}
+      onOpenChange={setOpen}
+      align="end"
+      className="w-80"
+      trigger={<Button size="sm">Add account</Button>}
+    >
+      <form
+        className="flex flex-col gap-2"
+        onSubmit={async (e) => {
+          e.preventDefault();
+          const f = new FormData(e.currentTarget);
+          const get = (k: string) => String(f.get(k) ?? '').trim() || undefined;
+          try {
+            setError(null);
+            await api('/accounts', {
+              method: 'POST',
+              body: {
+                domain: get('domain'),
+                name: get('name'),
+                country: 'US',
+                state: get('state'),
+                industry: get('industry'),
+                sizeRange: get('sizeRange'),
+              },
+            });
+            await qc.invalidateQueries({ queryKey: ['accounts'] });
+            setOpen(false);
+          } catch (err) {
+            setError(errorMessage(err));
+          }
+        }}
+      >
+        <Label>
+          Domain
+          <Input name="domain" placeholder="acme.com" required autoFocus />
+        </Label>
+        <Label>
+          Name
+          <Input name="name" required />
+        </Label>
+        <div className="grid grid-cols-3 gap-2">
           <Label>
-            Domain
-            <Input name="domain" placeholder="acme.com" required />
+            State
+            <Input name="state" placeholder="TX" maxLength={2} />
           </Label>
-          <Label>
-            Name
-            <Input name="name" required />
+          <Label className="col-span-2">
+            Industry
+            <Input name="industry" />
           </Label>
-          <div className="grid grid-cols-2 gap-3">
-            <Label>
-              State
-              <Input name="state" placeholder="CA" />
-            </Label>
-            <Label>
-              City
-              <Input name="city" />
-            </Label>
-            <Label>
-              Industry
-              <Input name="industry" />
-            </Label>
-            <Label>
-              Size
-              <Input name="sizeRange" placeholder="11-50" />
-            </Label>
-          </div>
-          <p className="text-muted-foreground text-xs">Country: United States</p>
-          {error ? <p className="text-destructive text-sm">{error}</p> : null}
-          <Button type="submit">Add</Button>
-        </form>
-      </DialogContent>
-    </Dialog>
+        </div>
+        <Label>
+          Size
+          <Input name="sizeRange" placeholder="51-200" />
+        </Label>
+        <p className="text-muted-foreground text-xs">US companies only.</p>
+        {error ? <p className="text-destructive text-xs">{error}</p> : null}
+        <Button type="submit" size="sm">
+          Add
+        </Button>
+      </form>
+    </Popover>
   );
 }

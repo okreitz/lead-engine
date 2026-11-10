@@ -13,6 +13,27 @@ export interface AccountRow {
   status: string;
   updatedAt: number;
   createdAt: number;
+  scoreReasons: { fit: string[]; intent: string[] } | null;
+  lastActivityAt: number;
+  stageSince: number;
+  nextStep: string | null;
+  nextStepDueAt: number | null;
+  openDealsUsd: number;
+}
+
+export const STREAM_LABEL: Record<string, string> = {
+  visits: '◉ visit',
+  conversations: '✉ conv',
+  personas: '★ fit',
+  manual: '✎ manual',
+};
+
+export function relTime(ms: number | null | undefined, now = Date.now()): string {
+  if (!ms) return '—';
+  const h = (now - ms) / 3_600_000;
+  if (h < 1) return `${Math.max(1, Math.round(h * 60))}m`;
+  if (h < 24) return `${Math.floor(h)}h`;
+  return `${Math.floor(h / 24)}d`;
 }
 
 export interface Contact {

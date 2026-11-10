@@ -29,6 +29,7 @@ import { api, errorMessage } from '@/lib/api';
 import { GO_TO, isTyping } from '@/lib/keys';
 import { useMe } from '@/lib/me';
 import { useSheet } from '@/lib/sheet';
+import { useSavedViews } from '@/lib/views';
 import { cn } from '@/lib/utils';
 
 interface NavItem {
@@ -99,6 +100,7 @@ function ShellInner({ children }: { children: ReactNode }) {
   const params = useSearchParams();
   const qc = useQueryClient();
   const sheet = useSheet();
+  const savedViews = useSavedViews();
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const collapsed = useSyncExternalStore(subscribeSidebar, readSidebar, () => false);
@@ -279,7 +281,12 @@ function ShellInner({ children }: { children: ReactNode }) {
               </Link>
               {item.href === '/accounts' && !collapsed ? (
                 <div className="mt-0.5 mb-1 ml-6 flex flex-col">
-                  {PINNED_VIEWS.map((v) => (
+                  {[
+                    ...PINNED_VIEWS,
+                    ...(savedViews.data ?? [])
+                      .filter((v) => v.pinned)
+                      .map((v) => ({ key: v.id, label: v.name })),
+                  ].map((v) => (
                     <Link
                       key={v.key}
                       href={`/accounts?view=${v.key}`}
