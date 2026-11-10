@@ -12,6 +12,11 @@ import { cn } from '@/lib/utils';
 
 export const NAV: { href: string; label: string }[] = [
   { href: '/', label: 'Overview' },
+  { href: '/accounts', label: 'Accounts' },
+  { href: '/pipeline', label: 'Pipeline' },
+  { href: '/contacts', label: 'Contacts' },
+  { href: '/data', label: 'Import / export' },
+  { href: '/suppression', label: 'Suppression' },
   { href: '/settings', label: 'Settings' },
 ];
 
