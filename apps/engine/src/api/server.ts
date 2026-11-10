@@ -11,6 +11,7 @@ import { registerBudgetRoutes } from './routes/budget.ts';
 import { registerCrmRoutes } from './routes/crm.ts';
 import { registerOfferRoutes } from './routes/offers.ts';
 import { registerSummaryRoutes } from './routes/summary.ts';
+import { registerTodayRoutes } from './routes/today.ts';
 import { registerWorkspaceRoutes } from './routes/workspaces.ts';
 
 export interface ApiOptions {
@@ -41,6 +42,7 @@ export function buildApi(ctx: AppContext, options: ApiOptions = {}): FastifyInst
     registerCrmRoutes(scoped, ctx);
     registerOfferRoutes(scoped, ctx);
     registerSummaryRoutes(scoped, ctx);
+    registerTodayRoutes(scoped, ctx);
   });
 
   app.setErrorHandler((error, request, reply) => {

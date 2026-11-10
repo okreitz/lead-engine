@@ -110,6 +110,8 @@ export const providerKeys = sqliteTable(
     provider: text('provider').notNull(),
     encryptedKey: text('encrypted_key').notNull(),
     createdAt: ts('created_at').notNull(),
+    /** Last time a provider call used this key (shown in Settings). */
+    lastUsedAt: ts('last_used_at'),
   },
   (t) => [primaryKey({ columns: [t.workspaceId, t.provider] })],
 );
@@ -152,6 +154,10 @@ export const offerVersions = sqliteTable(
     /** Pages the draft was built from: url + title, no content. */
     pages: json<{ url: string; title?: string }[]>('pages'),
     error: text('error'),
+    /** Per-field model rationale from the draft ("why"), keyed by field path. */
+    rationale: json<Record<string, string>>('rationale'),
+    /** Per-field human review of LLM-drafted values: accepted | edited | rejected. */
+    review: json<Record<string, 'accepted' | 'edited' | 'rejected'>>('review'),
     jobId: text('job_id'),
     createdAt: ts('created_at').notNull(),
     updatedAt: ts('updated_at').notNull(),
@@ -367,6 +373,32 @@ export const signals = sqliteTable(
   (t) => [index('signals_account_idx').on(t.accountId, t.occurredAt)],
 );
 
+/** Saved table/board views (docs/ui.md §3.2). `userId` null = shared with the workspace. */
+export interface SavedViewState {
+  filters?: Record<string, string[]>;
+  sort?: string;
+  columns?: string[];
+  layout?: 'table' | 'board';
+}
+
+export const savedViews = sqliteTable(
+  'saved_views',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    userId: text('user_id').references(() => users.id, { onDelete: 'cascade' }),
+    entity: text('entity', { enum: ['accounts', 'pipeline'] }).notNull(),
+    name: text('name').notNull(),
+    state: json<SavedViewState>('state').notNull(),
+    pinned: integer('pinned', { mode: 'boolean' }).notNull().default(false),
+    position: integer('position').notNull().default(0),
+    createdAt: ts('created_at').notNull(),
+  },
+  (t) => [index('saved_views_workspace_idx').on(t.workspaceId, t.entity)],
+);
+
 // ---------------------------------------------------------------- control
 
 /** `workspaceId` null = global. Values are lower-cased. */
@@ -401,6 +433,9 @@ export const costLedger = sqliteTable(
     free: integer('free', { mode: 'boolean' }).notNull().default(false),
     stream: text('stream').notNull(),
     jobId: text('job_id'),
+    /** The record the money was spent on, so every charge links back (docs/ui.md §1.3). */
+    entityType: text('entity_type'),
+    entityId: text('entity_id'),
     meta: json<Record<string, unknown>>('meta'),
     at: ts('at').notNull(),
   },

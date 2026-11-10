@@ -59,6 +59,11 @@ export interface CallOptions<O> {
   jobId?: string;
   /** Entity whose fields the result fills, for FieldSource. */
   target?: { entity: 'company' | 'account' | 'contact'; entityId: string };
+  /**
+   * The record this spend is for, written to the ledger so every charge links back
+   * (defaults to `target`).
+   */
+  ledgerEntity?: { type: string; id: string };
   /** Skip the cache read (the result is still cached). */
   refresh?: boolean;
   /** Only results that pass are cached (e.g. schema-valid LLM output). */
