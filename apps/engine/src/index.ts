@@ -4,6 +4,8 @@ import { buildCollector } from './collector/server.ts';
 import { loadConfig } from './config.ts';
 import { openDb } from './db/client.ts';
 import { runMigrations } from './db/migrate.ts';
+import { workspaces } from './db/schema.ts';
+import { rescoreWorkspace } from './crm/scoring.ts';
 import { jobHandlers } from './jobs/handlers.ts';
 import { JobRunner } from './jobs/queue.ts';
 
@@ -16,8 +18,16 @@ const ctx: AppContext = { db, config, now: Date.now };
 const api = buildApi(ctx, { logLevel: config.logLevel });
 const collector = buildCollector({ logLevel: config.logLevel });
 
-const runner = new JobRunner(ctx, jobHandlers());
+const runner = new JobRunner(ctx, jobHandlers(ctx));
 if (config.jobs) runner.start();
+
+// Intent decays over time: rescore every workspace hourly (local, no paid calls).
+const rescoreTimer = setInterval(() => {
+  for (const ws of db.select({ id: workspaces.id }).from(workspaces).all()) {
+    db.transaction((tx) => rescoreWorkspace(tx, ws.id, Date.now()));
+  }
+}, 3600_000);
+rescoreTimer.unref();
 
 await api.listen({ host: config.host, port: config.enginePort });
 await collector.listen({ host: config.host, port: config.collectorPort });

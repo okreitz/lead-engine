@@ -5,7 +5,7 @@
  */
 import { and, asc, eq, inArray, lte } from 'drizzle-orm';
 import type { AppContext } from '../api/context.ts';
-import type { Db } from '../db/client.ts';
+import type { Tx } from '../db/client.ts';
 import { jobs } from '../db/schema.ts';
 import { newId } from '../ids.ts';
 import { maskSecrets } from '../log-mask.ts';
@@ -27,7 +27,7 @@ export class PermanentJobError extends Error {
 }
 
 export function enqueue(
-  db: Db,
+  db: Tx,
   input: {
     workspaceId: string;
     type: string;
@@ -56,7 +56,7 @@ export function enqueue(
 }
 
 /** Called when a workspace's budget or keys change: waiting jobs become due now. */
-export function resumeWaitingJobs(db: Db, workspaceId: string, now: number): void {
+export function resumeWaitingJobs(db: Tx, workspaceId: string, now: number): void {
   db.update(jobs)
     .set({ state: 'queued', runAt: now, waitReason: null, updatedAt: now })
     .where(and(eq(jobs.workspaceId, workspaceId), eq(jobs.state, 'waiting')))

@@ -40,7 +40,8 @@ export default tseslint.config(
     rules: { '@typescript-eslint/no-explicit-any': 'off' },
   },
   {
-    files: ['apps/engine/src/commands.ts'],
+    // Dev tooling (e.g. `pnpm rss`) may spawn processes; app code may not.
+    files: ['apps/engine/src/commands.ts', 'scripts/**/*.mjs'],
     rules: { 'no-restricted-imports': 'off' },
   },
   ...nextVitals.map((config) => ({

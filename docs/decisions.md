@@ -111,5 +111,23 @@ SPEC §6's board is per account (`Account.stage`). Deals keep their own stage on
 ## 2026-11-09: CSV import is per-row, US-only, and exports neutralise formulas
 Each row runs in its own savepoint, so bad rows are reported (row number + reason) without undoing good ones. Accounts need an explicit US country; contacts and deals match accounts by domain. Exports leave out suppressed records, prefix cells starting with `= + - @` to stop spreadsheet formula injection, are audited, and sit behind the CAN-SPAM checklist in the UI.
 
+## 2026-11-09: Crawler without a DOM, with an SSRF guard
+`crawler/` uses undici and a regex-based readable-text extractor, with no jsdom or Chromium, which keeps idle memory low. Users type URLs, so the crawler resolves hosts through a `lookup` that refuses loopback, private, CGNAT, link-local and metadata addresses at connect time (no DNS-rebinding gap). It re-checks blocked sites, address and robots.txt on every redirect hop. robots.txt: 4xx = allow, 5xx or network error = disallow (RFC 9309). Limits: 1 request per 2 s per host, 10 s, 2 MB, HTML/text only. Pages go to the LLM only as `<untrusted_data>` blocks.
+
+## 2026-11-09: Offer drafts run as jobs; approved versions are immutable
+`POST /offers` creates a `drafting` version and an `offer.draft` job: homepage plus up to 5 same-site key pages (pricing > product > solutions > customers > about), then a zod-validated LLM draft that needs 20–40 intent phrases. A budget stop leaves the version `drafting` with the job waiting and the reason shown. Two invalid outputs mark it `failed`, and both calls are metered. Editing a draft updates it in place; editing an approved version creates a new draft. Approving supersedes the previous approved version and rescores every account. The workspace's active ICP is its most recently approved offer version.
+
+## 2026-11-09: Scoring formulas
+- **Fit:** rule points are industry/NAICS 35, size 25, state 15 and tech 15. Unknown fields get half credit, rules that don't apply are left out, avoided tech costs −25, and an exclude match sets fit to 0. When stream 3 writes an LLM `fit` signal, the score is the mean of rules and LLM.
+- **Intent:** 100·(1 − e^(−Σ wᵢ·0.5^(ageᵢ/halfLife)/10)), with half-lives of 14 d for visits, 7 d for threads and 30 d for hiring. `fit` signals and expired signals don't count.
+- **Priority:** 0.6·fit + 0.4·intent, with fit 0 when there is no approved ICP.
+- Every score stores its top 3 reasons. Accounts are rescored when created, imported or rescored by hand, when an offer version is approved, and hourly for decay.
+
+## 2026-11-09: `GET /api/v1/summary` attributes ROI by first source
+It accepts a read token and covers the current UTC week (from Monday) and month. The ROI rows are per `Account.firstSource`: spend from `CostLedger.stream`, accounts created, qualified (fit ≥ threshold and stage from Contacted on, excluding Lost), reply and meeting activities, and won deals with value. Threads are counted from `conversations` signals until stream 2 adds the Thread table. Suppressed accounts are left out.
+
+## 2026-11-09: `pnpm rss` measures production builds
+It builds the engine bundle and the Next standalone server, starts both on spare ports with a throwaway DB, and warms them up (setup, 20 accounts, every page and the main API routes). After 20 s idle it takes the peak of 5 `ps` samples per process tree and fails over 512 MB. First result in the Linux container (Node 22): engine 98.8 MB + web 91.7 MB = **190.5 MB**.
+
 ## 2026-11-09: Coolify deploy: no published ports, required secrets, a login gate on every page
 `deploy/compose.yaml` targets Coolify's Docker Compose build pack: services only `expose` ports and Coolify's proxy routes the domains (web :4500 now, collector :4511 in Phase 3; the API :4501 is never routed). `LE_MASTER_KEY` and `LE_SETUP_TOKEN` use `${VAR:?}`, so Coolify won't deploy without them. Local runs add `deploy/compose.local.yaml`, which publishes on 127.0.0.1. `apps/web/src/proxy.ts` redirects every page without a session cookie to `/login`; the engine still validates every API call. Steps are in `deploy/coolify.md`.

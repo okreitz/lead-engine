@@ -9,6 +9,8 @@ import { HttpError } from './http.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerBudgetRoutes } from './routes/budget.ts';
 import { registerCrmRoutes } from './routes/crm.ts';
+import { registerOfferRoutes } from './routes/offers.ts';
+import { registerSummaryRoutes } from './routes/summary.ts';
 import { registerWorkspaceRoutes } from './routes/workspaces.ts';
 
 export interface ApiOptions {
@@ -37,6 +39,8 @@ export function buildApi(ctx: AppContext, options: ApiOptions = {}): FastifyInst
     registerWorkspaceRoutes(scoped, ctx);
     registerBudgetRoutes(scoped, ctx);
     registerCrmRoutes(scoped, ctx);
+    registerOfferRoutes(scoped, ctx);
+    registerSummaryRoutes(scoped, ctx);
   });
 
   app.setErrorHandler((error, request, reply) => {
