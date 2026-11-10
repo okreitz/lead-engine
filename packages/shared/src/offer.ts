@@ -58,9 +58,42 @@ export const offerProfileSchema = z.object({
 });
 export type OfferProfile = z.infer<typeof offerProfileSchema>;
 
+/**
+ * Fields a person reviews one by one on an LLM draft (docs/ui.md §3.7): accept, edit or
+ * reject. An LLM draft cannot be approved until every field has a decision.
+ */
+export const REVIEW_FIELDS = [
+  'name',
+  'summary',
+  'valueProps',
+  'competitors',
+  'icp.industries',
+  'icp.naics',
+  'icp.employeeRange',
+  'icp.revenueRange',
+  'icp.states',
+  'icp.techUses',
+  'icp.techAvoids',
+  'icp.mustHave',
+  'icp.exclude',
+  'personas',
+  'intentPhrases',
+] as const;
+export type ReviewField = (typeof REVIEW_FIELDS)[number];
+export const REVIEW_DECISIONS = ['accepted', 'edited', 'rejected'] as const;
+export type ReviewDecision = (typeof REVIEW_DECISIONS)[number];
+export const reviewSchema = z.partialRecord(z.enum(REVIEW_FIELDS), z.enum(REVIEW_DECISIONS));
+
 /** What the LLM must return: the same shape with SPEC §4.1's 20–40 intent phrases. */
 export const offerDraftSchema = offerProfileSchema.extend({
   intentPhrases: z.array(intentPhraseSchema).min(20).max(40),
+});
+
+/** The draft plus a one-sentence "why" per field, shown next to each field for review. */
+export const offerDraftLlmSchema = offerDraftSchema.extend({
+  rationale: z
+    .array(z.object({ field: z.enum(REVIEW_FIELDS), why: str(300) }))
+    .max(REVIEW_FIELDS.length),
 });
 
 export const createOfferBodySchema = z
@@ -72,4 +105,22 @@ export const createOfferBodySchema = z
   })
   .strict();
 
-export const saveOfferVersionBodySchema = z.object({ data: offerProfileSchema }).strict();
+export const saveOfferVersionBodySchema = z
+  .object({ data: offerProfileSchema, review: reviewSchema.optional() })
+  .strict();
+
+/** Live match preview while editing the ICP (docs/ui.md §3.7). */
+export const offerPreviewBodySchema = z
+  .object({
+    // Loose on purpose: the preview runs on half-edited values.
+    icp: z.object({
+      industries: z.array(z.string().max(120)).max(20).default([]),
+      naics: z.array(z.string().max(6)).max(20).default([]),
+      employeeRange: z.string().max(40).default(''),
+      states: z.array(z.string().max(2)).max(51).default([]),
+      techUses: z.array(z.string().max(120)).max(20).default([]),
+      techAvoids: z.array(z.string().max(120)).max(20).default([]),
+      exclude: z.array(z.string().max(200)).max(20).default([]),
+    }),
+  })
+  .strict();

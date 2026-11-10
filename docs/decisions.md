@@ -134,3 +134,15 @@ It builds the engine bundle and the Next standalone server, starts both on spare
 
 ## 2026-11-09: The UI follows docs/ui.md
 Before building any screens, we researched the UIs of Apollo, ZoomInfo, Clay, Common Room, Octolens, Leadfeeder, RB2B, Warmly, 6sense, Attio, Twenty, HubSpot and Linear. The main complaints were credit anxiety, untrusted data, black-box scores and clutter. So every score shows its reasons, every enriched field shows its source, every paid action shows its cost first, the sidebar has at most 8 items, and the app opens on a Today page. Details and sketches are in `docs/ui.md`.
+
+## 2026-11-10: LLM offer drafts are reviewed field by field before approval
+The draft model now returns a one-sentence `rationale` per field, stored apart from the profile in `offer_versions.rationale`. A finished LLM draft starts with `review = {}`, and approval answers 409 `unreviewed` until each of the 15 review fields (name, summary, value props, competitors, the 9 ICP fields, personas, intent phrases) is accepted, edited or rejected. Rejecting a field reverts it to the last approved value (or empties it). Versions a person creates by editing an approved one have `review = null` and need no review.
+
+## 2026-11-10: The offer preview counts only the workspace's own companies
+`POST /offers/preview` runs the rule-based fit (no LLM, no paid calls) over the workspace's non-archived accounts, without suppressed domains. It returns how many reach the fit threshold, the top 5 states and 5 sample names. `companies` is shared across workspaces, so a wider "market" count would reveal other workspaces' records; Phase 2's persona-fit source can add a market count later.
+
+## 2026-11-10: Paid actions show an estimate and confirm only when costly
+`needsCostConfirm` in `@le/shared`: confirm when the estimate is over $1 or over 10% of the month's remaining budget; otherwise the estimate is shown next to the button and the action runs. The offer draft estimate is the upper bound the budget check uses (every page at its size cap plus the full output allowance). The budget stop at 100% still applies on the engine side.
+
+## 2026-11-10: ROI forecast is linear; ledger rows say what was charged
+The month-end forecast is spend ÷ elapsed share of the UTC month, with at least one day counted as elapsed. Stream bars compare spend with the sub-cap shares (shown even when not enforced). LLM spend also counts in its stream, as the budget check does. `GET /ledger` labels each row `paid`, `free_quota` or `not_charged` (usd 0 without a free quota, e.g. a miss), and links it to its record, resolved only within the workspace.

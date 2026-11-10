@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fitScore, intentScore, parseRange, priorityScore, type Icp } from '../src/crm/scoring.ts';
 import { signals } from '../src/db/schema.ts';
 import { newId } from '../src/ids.ts';
-import { draft } from './offer.test.ts';
+import { ACCEPT_ALL, draft, llmDraft } from './offer.test.ts';
 import { makeCtx, setupClient } from './helpers.ts';
 
 const icp = draft().icp as Icp;
@@ -132,7 +132,7 @@ describe('stored scores', () => {
     const { fakeWeb } = await import('./fake-web.ts');
     const ctx = makeCtx({}, () => NOW);
     Object.assign(ctx, {
-      llm: fakeLlm(() => draft()),
+      llm: fakeLlm(() => llmDraft()),
       crawler: fakeWeb({ 'https://acme.com/': { body: '<title>Acme</title>' } }).crawler,
     });
     const c = await setupClient(ctx);
@@ -163,6 +163,10 @@ describe('stored scores', () => {
       .run();
     const offer = await c.send('POST', '/api/v1/offers', { websiteUrl: 'acme.com' });
     await new JobRunner(ctx, jobHandlers(ctx)).tick();
+    await c.send('PUT', `/api/v1/offers/${offer.body.id}/versions/1`, {
+      data: draft(),
+      review: ACCEPT_ALL,
+    });
     expect(
       (await c.send('POST', `/api/v1/offers/${offer.body.id}/versions/1/approve`)).body.rescored,
     ).toBe(1);

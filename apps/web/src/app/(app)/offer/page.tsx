@@ -2,8 +2,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { Button } from '@/components/ui/button';
+import { useRef, useState } from 'react';
+import { CostAction } from '@/components/blocks/cost-action';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
 import { Input, Label, Textarea } from '@/components/ui/input';
 import { api, errorMessage, fmtDate } from '@/lib/api';
@@ -22,7 +22,33 @@ export default function OffersPage() {
   const router = useRouter();
   const list = useQuery({ queryKey: ['offers'], queryFn: () => api<OfferRow[]>('/offers') });
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const form = useRef<HTMLFormElement>(null);
+
+  async function create() {
+    const f = new FormData(form.current!);
+    const competitors = String(f.get('competitors') ?? '')
+      .split(/[\n,]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const notes = String(f.get('notes') ?? '').trim();
+    try {
+      setError(null);
+      const res = await api<{ id: string }>('/offers', {
+        method: 'POST',
+        body: {
+          websiteUrl: String(f.get('url')),
+          ...(notes ? { notes } : {}),
+          ...(competitors.length ? { competitors } : {}),
+        },
+      });
+      await qc.invalidateQueries({ queryKey: ['offers'] });
+      await qc.invalidateQueries({ queryKey: ['budget'] });
+      router.push(`/offer/${res.id}`);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  }
+
   return (
     <div className="flex max-w-3xl flex-col gap-4">
       <h1 className="text-2xl font-semibold tracking-tight">Offer profile</h1>
@@ -34,33 +60,11 @@ export default function OffersPage() {
       <Card>
         <CardTitle>New offer</CardTitle>
         <form
+          ref={form}
           className="flex flex-col gap-3"
-          onSubmit={async (e) => {
+          onSubmit={(e) => {
+            // Enter in a field goes through the same cost check as the button.
             e.preventDefault();
-            const f = new FormData(e.currentTarget);
-            const competitors = String(f.get('competitors') ?? '')
-              .split(/[\n,]/)
-              .map((s) => s.trim())
-              .filter(Boolean);
-            const notes = String(f.get('notes') ?? '').trim();
-            setBusy(true);
-            try {
-              setError(null);
-              const res = await api<{ id: string }>('/offers', {
-                method: 'POST',
-                body: {
-                  websiteUrl: String(f.get('url')),
-                  ...(notes ? { notes } : {}),
-                  ...(competitors.length ? { competitors } : {}),
-                },
-              });
-              await qc.invalidateQueries({ queryKey: ['offers'] });
-              router.push(`/offer/${res.id}`);
-            } catch (err) {
-              setError(errorMessage(err));
-            } finally {
-              setBusy(false);
-            }
           }}
         >
           <Label>
@@ -76,9 +80,15 @@ export default function OffersPage() {
             <Input name="competitors" />
           </Label>
           {error ? <p className="text-destructive text-sm">{error}</p> : null}
-          <Button type="submit" disabled={busy} className="self-start">
-            Draft offer profile
-          </Button>
+          <div>
+            <CostAction
+              estimatePath="/offers/draft-estimate"
+              label="Draft offer profile"
+              what="Read the website and draft the offer profile with the LLM"
+              validate={() => form.current?.reportValidity() ?? false}
+              onRun={create}
+            />
+          </div>
         </form>
       </Card>
       <ul className="flex flex-col gap-2">

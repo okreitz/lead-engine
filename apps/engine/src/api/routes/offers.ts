@@ -1,4 +1,10 @@
-import { createOfferBodySchema, offerProfileSchema, saveOfferVersionBodySchema } from '@le/shared';
+import {
+  createOfferBodySchema,
+  offerPreviewBodySchema,
+  offerProfileSchema,
+  REVIEW_FIELDS,
+  saveOfferVersionBodySchema,
+} from '@le/shared';
 import { and, asc, desc, eq, max } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -9,6 +15,7 @@ import type { Tx } from '../../db/client.ts';
 import { jobs, offers, offerVersions } from '../../db/schema.ts';
 import { newId } from '../../ids.ts';
 import { enqueue } from '../../jobs/queue.ts';
+import { draftEstimate, previewMatches } from '../../offer/preview.ts';
 import type { AppContext } from '../context.ts';
 import { HttpError, parse, workspaceOf } from '../http.ts';
 
@@ -139,6 +146,19 @@ export function registerOfferRoutes(app: FastifyInstance, ctx: AppContext): void
     return reply.code(201).send({ id: offerId, ...res });
   });
 
+  /** What a draft or redraft will cost at most, shown before it runs (docs/ui.md §1.3). */
+  app.get('/api/v1/offers/draft-estimate', async (request) => {
+    const { workspaceId } = workspaceOf(request);
+    return draftEstimate(ctx, workspaceId);
+  });
+
+  /** How many of the workspace's companies an ICP would match, while it is being edited. */
+  app.post('/api/v1/offers/preview', async (request) => {
+    const { workspaceId } = workspaceOf(request);
+    const { icp } = parse(offerPreviewBodySchema, request.body);
+    return previewMatches(ctx.db, workspaceId, icp);
+  });
+
   app.get('/api/v1/offers/:id', async (request) => {
     const { workspaceId } = workspaceOf(request);
     const { id } = parse(params, request.params);
@@ -190,7 +210,7 @@ export function registerOfferRoutes(app: FastifyInstance, ctx: AppContext): void
   app.put('/api/v1/offers/:id/versions/:version', async (request) => {
     const { workspaceId } = workspaceOf(request);
     const { id, version } = parse(versionParams, request.params);
-    const { data } = parse(saveOfferVersionBodySchema, request.body);
+    const { data, review } = parse(saveOfferVersionBodySchema, request.body);
     requireOffer(ctx.db, workspaceId, id);
     const now = ctx.now();
     return ctx.db.transaction((tx) => {
@@ -203,8 +223,17 @@ export function registerOfferRoutes(app: FastifyInstance, ctx: AppContext): void
       if (current.status === 'drafting')
         throw new HttpError(409, 'drafting', 'this version is still being drafted');
       if (current.status === 'draft' || current.status === 'failed') {
+        // An LLM draft under review keeps its source and collects per-field decisions.
+        const underReview = current.review !== null;
         tx.update(offerVersions)
-          .set({ data, status: 'draft', source: 'human', error: null, updatedAt: now })
+          .set({
+            data,
+            status: 'draft',
+            source: underReview ? current.source : 'human',
+            review: underReview ? { ...current.review, ...review } : null,
+            error: null,
+            updatedAt: now,
+          })
           .where(eq(offerVersions.id, current.id))
           .run();
         return { version, created: false };
@@ -247,6 +276,17 @@ export function registerOfferRoutes(app: FastifyInstance, ctx: AppContext): void
           'not_draft',
           `only drafts can be approved (this one is ${current.status})`,
         );
+      // AI output is a draft (docs/ui.md §1.6): every LLM-drafted field needs a decision.
+      if (current.review) {
+        const missing = REVIEW_FIELDS.filter((f) => !current.review?.[f]);
+        if (missing.length)
+          throw new HttpError(
+            409,
+            'unreviewed',
+            `review every drafted field before approving (${missing.length} left)`,
+            missing,
+          );
+      }
       const valid = offerProfileSchema.safeParse(current.data);
       if (!valid.success)
         throw new HttpError(
