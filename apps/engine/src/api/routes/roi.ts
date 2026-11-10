@@ -214,7 +214,7 @@ export function registerRoiRoutes(app: FastifyInstance, ctx: AppContext): void {
                 type: r.entityType,
                 id: r.entityId,
                 ...(links.get(`${r.entityType}:${r.entityId}`) ?? {
-                  label: r.entityId,
+                  label: `${r.entityType.replace('_', ' ')} (not found)`,
                   href: null,
                 }),
               }

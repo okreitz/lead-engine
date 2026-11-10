@@ -116,7 +116,7 @@ describe('ROI and ledger', () => {
     expect(row.entity).toEqual({
       type: 'account',
       id: 'acc_elsewhere',
-      label: 'acc_elsewhere',
+      label: 'account (not found)',
       href: null,
     });
   });

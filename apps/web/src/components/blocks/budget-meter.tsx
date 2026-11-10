@@ -22,7 +22,7 @@ export function BudgetMeter({
     <div className={cn('flex items-center gap-2', compact ? 'text-xs' : 'text-sm')}>
       {label ? <span className="text-muted-foreground w-28 shrink-0 truncate">{label}</span> : null}
       <span className="tabular-nums">
-        ${spentUsd.toFixed(2)} / ${budgetUsd.toFixed(0)}
+        ${spentUsd.toFixed(2)} / ${budgetUsd.toFixed(Number.isInteger(budgetUsd) ? 0 : 2)}
       </span>
       <span
         className={cn('bg-muted relative h-2 overflow-hidden rounded', compact ? 'w-20' : 'w-40')}
