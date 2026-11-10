@@ -134,12 +134,14 @@ export function createAccount(
 
 export interface AccountFilters {
   q?: string | undefined;
-  stage?: string | undefined;
-  stream?: string | undefined;
+  /** Values within one filter are OR; separate filters are AND (docs/ui.md §3.2). */
+  stage?: string | string[] | undefined;
+  stream?: string | string[] | undefined;
+  ids?: string[] | undefined;
   minFit?: number | undefined;
   minIntent?: number | undefined;
   status?: 'active' | 'archived' | undefined;
-  sort?: 'priority' | 'fit' | 'intent' | 'updated' | 'name' | undefined;
+  sort?: 'priority' | 'fit' | 'intent' | 'updated' | 'name' | 'last' | undefined;
   limit?: number | undefined;
   offset?: number | undefined;
 }
@@ -154,14 +156,28 @@ export function ftsQuery(q: string): string | null {
   return words.length ? words.map((w) => `"${w}"*`).join(' ') : null;
 }
 
+/** Latest signal or activity on the account ("Last" column). */
+const lastActivityAt = sql<number>`max(${accounts.updatedAt},
+  coalesce((SELECT max(occurred_at) FROM signals s WHERE s.account_id = ${accounts.id}), 0),
+  coalesce((SELECT max(at) FROM activities a WHERE a.account_id = ${accounts.id}), 0))`;
+/** When the account entered its current stage (last stage change, else creation). */
+const stageSince = sql<number>`coalesce((SELECT max(at) FROM activities a WHERE a.account_id = ${accounts.id} AND a.kind = 'stage_change' AND a.deal_id IS NULL), ${accounts.createdAt})`;
+
+export type AccountRow = ReturnType<typeof listAccounts>[number];
+
 export function listAccounts(tx: Tx, workspaceId: string, f: AccountFilters = {}) {
   const conds: SQL[] = [
     eq(accounts.workspaceId, workspaceId),
     eq(accounts.status, f.status ?? 'active'),
     domainNotSuppressed(workspaceId, companies.domain),
   ];
-  if (f.stage) conds.push(eq(accounts.stage, f.stage));
-  if (f.stream) conds.push(eq(accounts.firstSource, f.stream as 'manual'));
+  const many = (v: string | string[] | undefined) =>
+    v === undefined ? [] : Array.isArray(v) ? v : [v];
+  const stages = many(f.stage);
+  const streams = many(f.stream) as ('manual' | 'personas' | 'visits' | 'conversations')[];
+  if (stages.length) conds.push(inArray(accounts.stage, stages));
+  if (streams.length) conds.push(inArray(accounts.firstSource, streams));
+  if (f.ids) conds.push(f.ids.length ? inArray(accounts.id, f.ids) : sql`0`);
   if (f.minFit !== undefined) conds.push(gte(accounts.fitScore, f.minFit));
   if (f.minIntent !== undefined) conds.push(gte(accounts.intentScore, f.minIntent));
   const fts = f.q ? ftsQuery(f.q) : null;
@@ -176,6 +192,7 @@ export function listAccounts(tx: Tx, workspaceId: string, f: AccountFilters = {}
     intent: [desc(accounts.intentScore)],
     updated: [desc(accounts.updatedAt)],
     name: [asc(companies.name)],
+    last: [desc(lastActivityAt)],
   }[f.sort ?? 'priority'];
   return tx
     .select({
@@ -193,6 +210,16 @@ export function listAccounts(tx: Tx, workspaceId: string, f: AccountFilters = {}
       status: accounts.status,
       updatedAt: accounts.updatedAt,
       createdAt: accounts.createdAt,
+      scoreReasons: accounts.scoreReasons,
+      lastActivityAt,
+      stageSince,
+      nextStep: sql<
+        string | null
+      >`(SELECT text FROM next_steps n WHERE n.account_id = ${accounts.id} AND n.done_at IS NULL ORDER BY n.due_at IS NULL, n.due_at LIMIT 1)`,
+      nextStepDueAt: sql<
+        number | null
+      >`(SELECT due_at FROM next_steps n WHERE n.account_id = ${accounts.id} AND n.done_at IS NULL ORDER BY n.due_at IS NULL, n.due_at LIMIT 1)`,
+      openDealsUsd: sql<number>`(SELECT coalesce(sum(value_usd), 0) FROM deals d WHERE d.account_id = ${accounts.id} AND d.outcome IS NULL)`,
     })
     .from(accounts)
     .innerJoin(companies, eq(companies.id, accounts.companyId))
@@ -315,13 +342,22 @@ export function setAccountStage(
   return true;
 }
 
-export function pipeline(tx: Tx, workspaceId: string) {
+export function pipeline(tx: Tx, workspaceId: string, filters: AccountFilters = {}) {
   const ws = workspaceRow(tx, workspaceId);
   const stages = stagesOf(ws.settings);
-  const rows = listAccounts(tx, workspaceId, { limit: 2000 });
+  const rows = listAccounts(tx, workspaceId, { ...filters, limit: 2000 });
   return {
     stages,
-    columns: stages.map((stage) => ({ stage, accounts: rows.filter((r) => r.stage === stage) })),
+    columns: stages.map((stage) => {
+      const list = rows.filter((r) => r.stage === stage);
+      return {
+        stage,
+        accounts: list,
+        count: list.length,
+        /** Open deal value in this column (docs/ui.md §3.4 column totals). */
+        openDealsUsd: list.reduce((sum, r) => sum + (r.openDealsUsd ?? 0), 0),
+      };
+    }),
     /** Accounts whose stage is no longer in the workspace's list. */
     other: rows.filter((r) => !stages.includes(r.stage)),
   };

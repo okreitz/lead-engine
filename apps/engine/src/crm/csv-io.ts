@@ -133,9 +133,10 @@ export function exportCsv(
   tx: Tx,
   workspaceId: string,
   entity: 'accounts' | 'contacts' | 'deals',
+  ids?: string[],
 ): { csv: string; rows: number } {
   if (entity === 'accounts') {
-    const rows = listAccounts(tx, workspaceId, { limit: 100_000 });
+    const rows = listAccounts(tx, workspaceId, { limit: 100_000, ...(ids ? { ids } : {}) });
     const cols = [
       'domain',
       'name',

@@ -375,10 +375,10 @@ export const signals = sqliteTable(
 
 /** Saved table/board views (docs/ui.md §3.2). `userId` null = shared with the workspace. */
 export interface SavedViewState {
-  filters?: Record<string, string[]>;
-  sort?: string;
-  columns?: string[];
-  layout?: 'table' | 'board';
+  filters?: Record<string, string[]> | undefined;
+  sort?: string | undefined;
+  columns?: string[] | undefined;
+  layout?: 'table' | 'board' | undefined;
 }
 
 export const savedViews = sqliteTable(

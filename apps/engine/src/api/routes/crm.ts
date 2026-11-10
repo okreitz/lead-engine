@@ -52,6 +52,29 @@ import { HttpError, parse, workspaceOf } from '../http.ts';
 
 const idParam = z.object({ id: z.string().min(1).max(64) });
 
+/** Comma-separated multi-value query param (OR within a filter). */
+const csvList = <T extends string>(item: z.ZodType<T, string>) =>
+  z
+    .string()
+    .max(2000)
+    .transform((v) =>
+      v
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean),
+    )
+    .pipe(z.array(item).max(200))
+    .optional();
+
+const accountFilterQuery = {
+  q: z.string().max(200).optional(),
+  stage: csvList(z.string().max(40)),
+  stream: csvList(z.enum(['visits', 'conversations', 'personas', 'manual'])),
+  ids: csvList(z.string().max(64)),
+  minFit: z.coerce.number().min(0).max(100).optional(),
+  minIntent: z.coerce.number().min(0).max(100).optional(),
+};
+
 /** Turns CRM domain errors into HTTP errors. */
 function crm<T>(fn: () => T): T {
   try {
@@ -74,14 +97,10 @@ export function registerCrmRoutes(app: FastifyInstance, ctx: AppContext): void {
     const { workspaceId } = workspaceOf(request);
     const q = parse(
       z.object({
-        q: z.string().max(200).optional(),
-        stage: z.string().max(40).optional(),
-        stream: z.enum(['visits', 'conversations', 'personas', 'manual']).optional(),
-        minFit: z.coerce.number().min(0).max(100).optional(),
-        minIntent: z.coerce.number().min(0).max(100).optional(),
+        ...accountFilterQuery,
         status: z.enum(['active', 'archived']).optional(),
-        sort: z.enum(['priority', 'fit', 'intent', 'updated', 'name']).optional(),
-        limit: z.coerce.number().int().min(1).max(1000).optional(),
+        sort: z.enum(['priority', 'fit', 'intent', 'updated', 'name', 'last']).optional(),
+        limit: z.coerce.number().int().min(1).max(5000).optional(),
         offset: z.coerce.number().int().min(0).optional(),
       }),
       request.query,
@@ -183,7 +202,8 @@ export function registerCrmRoutes(app: FastifyInstance, ctx: AppContext): void {
 
   app.get('/api/v1/pipeline', { config: { token: 'read' } }, async (request) => {
     const { workspaceId } = workspaceOf(request);
-    return pipeline(ctx.db, workspaceId);
+    const q = parse(z.object(accountFilterQuery), request.query);
+    return pipeline(ctx.db, workspaceId, q);
   });
 
   // ---- contacts
@@ -439,7 +459,13 @@ export function registerCrmRoutes(app: FastifyInstance, ctx: AppContext): void {
       request.params,
     );
     const name = entity.replace('.csv', '') as (typeof CSV_ENTITIES)[number];
-    const { csv, rows } = exportCsv(ctx.db, workspaceId, name);
+    const { ids } = parse(z.object({ ids: csvList(z.string().max(64)) }), request.query);
+    const { csv, rows } = exportCsv(
+      ctx.db,
+      workspaceId,
+      name,
+      name === 'accounts' ? ids : undefined,
+    );
     audit(
       ctx.db,
       { workspaceId, userId, action: 'export', target: name, details: { rows } },
