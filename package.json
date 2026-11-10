@@ -16,7 +16,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "db:generate": "pnpm --filter @le/engine db:generate",
-    "db:migrate": "pnpm --filter @le/engine db:migrate"
+    "db:migrate": "pnpm --filter @le/engine db:migrate",
+    "rss": "node scripts/rss.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

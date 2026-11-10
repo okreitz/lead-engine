@@ -35,7 +35,13 @@ export default tseslint.config(
     },
   },
   {
-    files: ['apps/engine/src/commands.ts'],
+    // Tests read loosely-typed JSON responses.
+    files: ['**/test/**/*.ts'],
+    rules: { '@typescript-eslint/no-explicit-any': 'off' },
+  },
+  {
+    // Dev tooling (e.g. `pnpm rss`) may spawn processes; app code may not.
+    files: ['apps/engine/src/commands.ts', 'scripts/**/*.mjs'],
     rules: { 'no-restricted-imports': 'off' },
   },
   ...nextVitals.map((config) => ({

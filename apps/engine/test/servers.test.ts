@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApi } from '../src/api/server.ts';
 import { buildCollector } from '../src/collector/server.ts';
+import { makeCtx } from './helpers.ts';
 
 const apps: FastifyInstance[] = [];
 afterEach(async () => {
@@ -15,14 +16,14 @@ function track<T extends FastifyInstance>(app: T): T {
 
 describe('engine api', () => {
   it('answers the health check', async () => {
-    const api = track(buildApi({ logLevel: 'silent' }));
+    const api = track(buildApi(makeCtx(), { logLevel: 'silent' }));
     const res = await api.inject({ method: 'GET', url: '/api/v1/health' });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ status: 'ok', service: 'engine' });
   });
 
   it('does not serve collector routes', async () => {
-    const api = track(buildApi({ logLevel: 'silent' }));
+    const api = track(buildApi(makeCtx(), { logLevel: 'silent' }));
     const res = await api.inject({ method: 'POST', url: '/collect/v', payload: {} });
     expect(res.statusCode).toBe(404);
   });
