@@ -253,6 +253,8 @@ AuditLog        { id, workspaceId?, userId?, action, target, at, details }
 
 ## 6. CRM
 
+How these screens look and behave (navigation, layouts, shortcuts, score and source display, build order) is in [`docs/ui.md`](docs/ui.md). Build the UI from it.
+
 - **Accounts list:** sortable by priority, filterable by stream, stage, fit and intent. FTS search over name and domain.
 - **Account page:** firmographics, fit reasons, a signal timeline (visits, threads, fit, hiring), contacts with email status and sources, deals, activities and the next step.
 - **Pipeline board:** stages per workspace. Default: New → Researching → Contacted → Replied → Meeting → Proposal → Won / Lost. Drag and drop; every stage change is written as an `Activity`.

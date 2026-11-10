@@ -131,3 +131,6 @@ It builds the engine bundle and the Next standalone server, starts both on spare
 
 ## 2026-11-09: Coolify deploy: no published ports, required secrets, a login gate on every page
 `deploy/compose.yaml` targets Coolify's Docker Compose build pack: services only `expose` ports and Coolify's proxy routes the domains (web :4500 now, collector :4511 in Phase 3; the API :4501 is never routed). `LE_MASTER_KEY` and `LE_SETUP_TOKEN` use `${VAR:?}`, so Coolify won't deploy without them. Local runs add `deploy/compose.local.yaml`, which publishes on 127.0.0.1. `apps/web/src/proxy.ts` redirects every page without a session cookie to `/login`; the engine still validates every API call. Steps are in `deploy/coolify.md`.
+
+## 2026-11-09: The UI follows docs/ui.md
+Before building any screens, we researched the UIs of Apollo, ZoomInfo, Clay, Common Room, Octolens, Leadfeeder, RB2B, Warmly, 6sense, Attio, Twenty, HubSpot and Linear. The main complaints were credit anxiety, untrusted data, black-box scores and clutter. So every score shows its reasons, every enriched field shows its source, every paid action shows its cost first, the sidebar has at most 8 items, and the app opens on a Today page. Details and sketches are in `docs/ui.md`.
