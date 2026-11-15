@@ -31,3 +31,11 @@ export class ProviderCallError extends Error {
     super(message);
   }
 }
+
+/** The provider refused the workspace's key or it has no credits: retrying can't help. */
+export class ProviderAuthError extends ProviderCallError {
+  override name = 'ProviderAuthError';
+  constructor(message: string) {
+    super(message, null, false);
+  }
+}

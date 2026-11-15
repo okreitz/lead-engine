@@ -20,6 +20,8 @@ Set these under **Environment Variables**. Mark them as secrets where Coolify of
 | `LE_COOKIE_SECURE` | no | `auto` (default): the session cookie is `Secure` when the request came over HTTPS. Use `true` when the app is only reached over HTTPS. |
 | `ANTHROPIC_API_KEY` | no | Instance fallback for the `anthropic-api` LLM adapter. Workspaces can store their own key instead (Settings → Provider keys). |
 | `LE_SEC_USER_AGENT` | no | SEC EDGAR requires a declared contact User-Agent, e.g. `Lead Engine admin@yourdomain.com`. Without it, the EDGAR import and EDGAR officers are off. |
+| `LE_REACHER` | no | `off` (default). Set `on` only after the port 25 test passes, together with `LE_REACHER_SECRET` (`openssl rand -hex 24`), `RCH_HELLO_NAME` and `RCH_FROM_EMAIL` (a domain whose reverse DNS matches the VPS), and add `--profile reacher` so the `reacher` sidecar starts. Until then Icypeas verifies (workspace key). |
+| `LE_HTTPX_BIN` | no | Absolute path to ProjectDiscovery's `httpx` if you add it to the engine image; technographics are skipped without it. |
 | `LE_LOG_LEVEL` | no | `info` (default). |
 
 There is no separate session secret. Sessions are random 256-bit tokens; only their SHA-256 is stored in SQLite, and every unsafe request also needs a per-session CSRF token.

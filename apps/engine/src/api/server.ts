@@ -13,6 +13,7 @@ import { registerOfferRoutes } from './routes/offers.ts';
 import { registerSummaryRoutes } from './routes/summary.ts';
 import { registerTodayRoutes } from './routes/today.ts';
 import { registerRoiRoutes } from './routes/roi.ts';
+import { registerPeopleRoutes } from './routes/people.ts';
 import { registerPersonaRoutes } from './routes/persona.ts';
 import { registerUniverseRoutes } from './routes/universe.ts';
 import { registerViewRoutes } from './routes/views.ts';
@@ -51,6 +52,7 @@ export function buildApi(ctx: AppContext, options: ApiOptions = {}): FastifyInst
     registerRoiRoutes(scoped, ctx);
     registerUniverseRoutes(scoped, ctx);
     registerPersonaRoutes(scoped, ctx);
+    registerPeopleRoutes(scoped, ctx);
   });
 
   app.setErrorHandler((error, request, reply) => {

@@ -164,3 +164,18 @@ The ICP filter runs in SQL over universe companies (industry phrase or word LIKE
 
 ## 2026-11-15: httpx is optional and locked down
 `commands.ts` accepts only `-silent -json -td -duc -nc -fr -version` and numeric `-timeout -rl -t -maxr -retries` plus a `User-Agent` header; targets go on stdin. `-pd` (cloud upload) and `-ss` (Chrome) can't be passed. `LE_HTTPX_BIN` points at ProjectDiscovery's binary because Python's `httpx` package installs a CLI with the same name. The image doesn't ship httpx; without it, runs note "Technographics skipped" and continue.
+
+## 2026-11-15: People come from the company's own pages and EDGAR, matched to personas
+`people.find` reads up to 3 team/about/leadership pages (homepage nav + sitemap), and the LLM returns name, title, source page and persona. A person is kept only if their name appears on the page they cite; an unknown persona falls back to title-keyword matching. Public companies add Form 3/4/5 officers from EDGAR (`isOfficer`, true/false or 1/0). Every contact field gets a FieldSource: name/title/email from the page or filing, `personaMatch` from the LLM or keywords, seniority from title rules, department from the persona. No people-search vendor.
+
+## 2026-11-15: Email waterfall and statuses
+Candidates: an address the site publishes for that person, else the domain's pattern learned from published addresses (`companies.email_pattern`), else the top 3 permutations. Reacher verifies when `LE_REACHER=on` (free, one check per domain per minute; a throttled check reschedules the job instead of sleeping), else Icypeas verification (0.1 credit). Invalid → next candidate; catch-all, risky or unknown → stop, and only catch-all/unknown go to the Icypeas finder (1 credit, only when found). Icypeas `not_found` on verification can't separate catch-all from unknown, so it maps to `unknown`; `probable` maps to `risky`; a verified generated address is `pattern_verified`, a verified published or found one `verified`. A rejected Icypeas key or empty credits fails the job permanently with that message. Without any verifier, only published or pattern addresses are stored, as `unknown`.
+
+## 2026-11-15: Reacher is an opt-in compose profile, pinned to v0.11.11
+`reacherhq/backend:latest` still points at the pre-MIT v0.11.8, so the tag is pinned. The image bundles Chromium for some headless checks, so it is never in the default stack: it runs only with `--profile reacher` and `LE_REACHER=on`, after the port 25 test. A Chromium-free build from the MIT source is the alternative if that matters.
+
+## 2026-11-15: Hiring signals from public ATS boards linked on the site
+Greenhouse, Lever and Ashby boards linked from the company's homepage, team or careers page are read through their public job-board APIs (the documented, unauthenticated GET endpoints). Postings whose titles match a persona become `hiring` signals (weight 3, 60-day expiry, 30-day half-life) with the posting URL as evidence. Their third-party terms weren't found ([unverified] in providers.md); we only read listings the companies publish for applicants, at one request per board.
+
+## 2026-11-15: Phase 2 acceptance runs on fixtures
+`test/acceptance.test.ts` runs 600 fixture companies through a 500-candidate run with people and emails on, using the fake crawler, LLM ($0.001/call) and Icypeas: 375 accounts with reasons, 1,125 contacts from team pages, 1,109 with an email (verified, pattern_verified, risky, unknown), $6.44 of the $20 test budget, a source on every contact field and no LinkedIn data. A real-provider run needs `LE_E2E=1` and keys, and is open.

@@ -11,6 +11,7 @@ import {
   type CandidateFilters,
 } from '../../db/schema.ts';
 import { countCandidates, filtersFromIcp, selectCandidates } from '../../persona/candidates.ts';
+import { emailPerContactUsd, peopleEstimateUsd } from '../../people/jobs.ts';
 import { approvedOffer, perCandidateUsd, startRun } from '../../persona/run.ts';
 import { budgetStatus } from '../../providers/budget.ts';
 import type { AppContext } from '../context.ts';
@@ -50,6 +51,13 @@ export function registerPersonaRoutes(app: FastifyInstance, ctx: AppContext): vo
       model: p.each.model,
       remainingUsd: p.budget.remainingUsd,
       confirm: needsCostConfirm(p.usd, p.budget.remainingUsd),
+      // "Then find people and emails": per new account, assuming up to 10 contacts.
+      peoplePerAccountUsd: Number(
+        (
+          peopleEstimateUsd(ctx, workspaceId, p.offer.profile).usd +
+          10 * emailPerContactUsd(ctx, workspaceId).usd
+        ).toFixed(4),
+      ),
     };
   });
 

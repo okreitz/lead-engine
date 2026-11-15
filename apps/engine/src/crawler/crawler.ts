@@ -220,33 +220,48 @@ export class Crawler {
 
   /** Fetches one page, following up to 5 redirects with every check repeated per hop. */
   async fetchPage(raw: string): Promise<CrawledPage> {
+    const res = await this.follow(
+      raw,
+      'text/html,text/plain;q=0.9',
+      (t) => t.includes('text/html') || t.includes('text/plain') || t.includes('application/xhtml'),
+    );
+    const page = res.type.includes('text/plain')
+      ? { title: '', description: '', text: res.body, links: [] }
+      : extractPage(res.body, res.url);
+    return { ...page, url: res.url, status: res.status };
+  }
+
+  /** Fetches an XML document (sitemaps) with the same robots, size and redirect rules. */
+  async fetchXml(raw: string): Promise<{ url: string; body: string }> {
+    const res = await this.follow(raw, 'application/xml,text/xml;q=0.9', (t) => t.includes('xml'));
+    return { url: res.url, body: res.body };
+  }
+
+  private async follow(
+    raw: string,
+    accept: string,
+    typeOk: (type: string) => boolean,
+  ): Promise<{ url: string; status: number; type: string; body: string }> {
     let url = checkUrl(raw);
     for (let hop = 0; hop <= 5; hop++) {
       if (!(await this.allowedByRobots(url))) {
         throw new CrawlError('disallowed by robots.txt', url.toString(), 'robots');
       }
-      const res = await this.rawGet(url, 'text/html,text/plain;q=0.9');
+      const res = await this.rawGet(url, accept);
       if (res.status >= 300 && res.status < 400 && res.location) {
         url = checkUrl(new URL(res.location, url).toString());
         continue;
       }
       if (res.status >= 400) throw new CrawlError(`HTTP ${res.status}`, url.toString(), 'http');
       const type = res.type.toLowerCase();
-      if (
-        !type.includes('text/html') &&
-        !type.includes('text/plain') &&
-        !type.includes('application/xhtml')
-      ) {
+      if (!typeOk(type)) {
         throw new CrawlError(
           `unsupported content type ${type || 'unknown'}`,
           url.toString(),
           'type',
         );
       }
-      const page = type.includes('text/plain')
-        ? { title: '', description: '', text: res.body, links: [] }
-        : extractPage(res.body, url.toString());
-      return { ...page, url: url.toString(), status: res.status };
+      return { url: url.toString(), status: res.status, type, body: res.body };
     }
     throw new CrawlError('too many redirects', raw, 'http');
   }

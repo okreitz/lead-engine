@@ -198,6 +198,9 @@ export const companies = sqliteTable(
     ticker: text('ticker'),
     /** Which dataset filled each firmographic field, e.g. { industry: 'pdl' } (source dots). */
     origins: json<Record<string, string>>('origins').notNull().default({}),
+    /** Email pattern learned from addresses published on the company's own site. */
+    emailPattern: text('email_pattern'),
+    emailPatternExamples: integer('email_pattern_examples'),
     updatedAt: ts('updated_at').notNull(),
   },
   (t) => [
