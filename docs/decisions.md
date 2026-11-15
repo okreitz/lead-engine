@@ -210,3 +210,9 @@ A company match from ipapi.is maps the IPv4 /24 (IPv6 /48) around the visitor, n
 
 ## 2026-11-15: Visiting companies become US accounts; people jobs are capped
 A business IP located in the US is taken as a US company (`createAccount` with country US); an existing non-US company record is refused and counted `non_us`. A newly created account at or above the fit threshold queues `people.find` with emails when an offer is approved, the budget isn't reached, it has no contacts and no pending job, and fewer than 20 visit-triggered people jobs were queued in the last 24 hours.
+
+## 2026-11-15: Empty environment variables count as unset
+Compose passes an unset optional variable as an empty string (`${VAR:-}`), which failed validation for variables with a format (`LE_SEC_USER_AGENT`, `LE_COLLECTOR_URL`, `LE_IPINFO_TOKEN`) and stopped the engine at startup. `loadConfig` now drops empty values before parsing, so they fall back to their defaults.
+
+## 2026-11-15: `pnpm rss` with stream 1
+The warm-up now loads the real DB-IP Lite databases (downloaded into the throwaway data folder, or `--geo-dir`), adds a site and sends 300 collector page views before idling. Linux container, Node 22: engine 121.2 MB + web 96.0 MB = **217.2 MB** with the databases already on disk, and engine 156.5 MB + web 96.1 MB = **252.6 MB** right after the engine downloaded and gunzipped them itself (the download leaves a higher RSS watermark until the next restart). The two .mmdb files are read into one Buffer each (~18 MB) and decoded lazily with a 2,000-record cache.
