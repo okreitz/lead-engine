@@ -231,6 +231,12 @@ export class Crawler {
     return { ...page, url: res.url, status: res.status };
   }
 
+  /** Raw HTML of one page (install checks look for a script tag the text extractor drops). */
+  async fetchHtml(raw: string): Promise<{ url: string; status: number; body: string }> {
+    const res = await this.follow(raw, 'text/html', (t) => t.includes('html'));
+    return { url: res.url, status: res.status, body: res.body };
+  }
+
   /** Fetches an XML document (sitemaps) with the same robots, size and redirect rules. */
   async fetchXml(raw: string): Promise<{ url: string; body: string }> {
     const res = await this.follow(raw, 'application/xml,text/xml;q=0.9', (t) => t.includes('xml'));

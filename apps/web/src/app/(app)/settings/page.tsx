@@ -7,6 +7,7 @@ import { KeyHelp } from '@/components/blocks/key-help';
 import { ConfirmButton } from '@/components/confirm';
 import { BudgetSettings } from '@/components/settings/budget-settings';
 import { CompanyData } from '@/components/settings/company-data';
+import { SitesSettings } from '@/components/settings/sites';
 import { SuppressionList } from '@/components/settings/suppression-list';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
@@ -17,6 +18,7 @@ import { useMe } from '@/lib/me';
 
 const TABS = [
   { key: 'general', label: 'General' },
+  { key: 'sites', label: 'Sites & snippet' },
   { key: 'keys', label: 'Provider keys' },
   { key: 'budget', label: 'Budget' },
   { key: 'data', label: 'Company data' },
@@ -27,7 +29,7 @@ const TABS = [
 ] as const;
 type TabKey = (typeof TABS)[number]['key'];
 
-/** Settings as tabs (docs/ui.md §3.9). Sites & snippet arrives with stream 1 (Phase 3). */
+/** Settings as tabs (docs/ui.md §3.9). */
 export default function SettingsPage() {
   return (
     <Suspense fallback={null}>
@@ -79,6 +81,7 @@ function SettingsTabs() {
           <Password />
         </>
       ) : null}
+      {tab === 'sites' ? <SitesSettings owner={owner} /> : null}
       {tab === 'keys' ? <ProviderKeys disabled={!owner} /> : null}
       {tab === 'budget' ? <BudgetSettings disabled={!owner} /> : null}
       {tab === 'data' ? <CompanyData disabled={!owner} /> : null}
