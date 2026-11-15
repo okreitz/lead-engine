@@ -8,6 +8,7 @@ import type { AppContext } from '../api/context.ts';
 import type { Tx } from '../db/client.ts';
 import {
   accounts,
+  companies,
   contacts,
   ipCompanies,
   jobs,
@@ -19,7 +20,8 @@ import {
   type MatchSource,
   type VisitOutcome,
 } from '../db/schema.ts';
-import { createAccount, CrmError, workspaceRow } from '../crm/accounts.ts';
+import { createAccount, createAccountForCompany, CrmError, workspaceRow } from '../crm/accounts.ts';
+import { normalizeDomain } from '../suppression.ts';
 import { rescoreAccount } from '../crm/scoring.ts';
 import { newId } from '../ids.ts';
 import { enqueue } from '../jobs/queue.ts';
@@ -209,15 +211,23 @@ export function accountForMatch(
   now: number,
 ): RecordResult {
   try {
+    // An existing company keeps its name and fields; a match never renames it.
+    const existing = tx
+      .select({ id: companies.id })
+      .from(companies)
+      .where(eq(companies.domain, normalizeDomain(match.domain)))
+      .get();
     // The visitor's IP is in the US (step 3); a company that already exists elsewhere is
-    // checked by createAccount, which refuses non-US companies.
-    const r = createAccount(
-      tx,
-      workspaceId,
-      { domain: match.domain, name: match.companyName ?? match.domain, country: 'US' },
-      'visits',
-      now,
-    );
+    // checked by createAccount(ForCompany), which refuses non-US companies.
+    const r = existing
+      ? createAccountForCompany(tx, workspaceId, existing.id, 'visits', now)
+      : createAccount(
+          tx,
+          workspaceId,
+          { domain: match.domain, name: match.companyName ?? match.domain, country: 'US' },
+          'visits',
+          now,
+        );
     return { status: 'ok', accountId: r.id, created: r.created };
   } catch (err) {
     if (err instanceof CrmError && err.code === 'not_us') return { status: 'not_us' };
@@ -365,4 +375,13 @@ export function afterMatch(
 ): void {
   ctx.db.transaction((tx) => rescoreAccount(tx, workspaceId, accountId, ctx.now()));
   if (created) maybeQueuePeople(ctx, workspaceId, accountId);
+}
+
+/** Bumped when the IP map is corrected, so the collector forgets today's cached session matches. */
+let ipMapVersion = 0;
+export function bumpIpMapVersion(): void {
+  ipMapVersion++;
+}
+export function currentIpMapVersion(): number {
+  return ipMapVersion;
 }

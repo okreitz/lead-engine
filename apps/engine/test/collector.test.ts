@@ -243,6 +243,8 @@ describe('collector pipeline: matched visits', () => {
     await pipeline.processVisit(view(site, IP.businessColleague));
     expect(ipapiCalls).toHaveLength(1);
     expect(ctx.db.select().from(accounts).all()).toHaveLength(1);
+    // A match from the IP map (no company name) doesn't rename the company.
+    expect(ctx.db.select().from(companies).get()!.name).toBe('Acme Robotics Inc');
     expect(counters()).toEqual({ matched: { sessions: 2, pageviews: 2 } });
   });
 

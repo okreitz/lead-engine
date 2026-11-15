@@ -27,6 +27,7 @@ import {
   accountForMatch,
   afterMatch,
   countOutcome,
+  currentIpMapVersion,
   findIpCompany,
   isRejected,
   recordIdentify,
@@ -94,6 +95,7 @@ export class VisitPipeline {
   /** Session hash → result, for today only (in memory; never stored). */
   private memo = new Map<string, Memo>();
   private memoDay = '';
+  private memoVersion = currentIpMapVersion();
 
   constructor(private readonly deps: PipelineDeps) {
     this.hasher = new SessionHasher(deps.ctx.db);
@@ -199,9 +201,11 @@ export class VisitPipeline {
   }
 
   private memoFor(day: string): Map<string, Memo> {
-    if (day !== this.memoDay || this.memo.size > MEMO_MAX) {
+    const version = currentIpMapVersion();
+    if (day !== this.memoDay || this.memo.size > MEMO_MAX || version !== this.memoVersion) {
       this.memo = new Map();
       this.memoDay = day;
+      this.memoVersion = version;
     }
     return this.memo;
   }
