@@ -1,4 +1,6 @@
 import { REVIEW_FIELDS } from '@le/shared';
+import type { AppContext } from '../src/api/context.ts';
+import { offers, offerVersions, workspaces } from '../src/db/schema.ts';
 
 export function draft(overrides: object = {}) {
   return {
@@ -47,3 +49,38 @@ export function llmDraft(overrides: object = {}) {
 }
 
 export const ACCEPT_ALL = Object.fromEntries(REVIEW_FIELDS.map((f) => [f, 'accepted']));
+
+/** Inserts an approved offer version with the given ICP overrides (no draft job). */
+export function approveOffer(ctx: AppContext, icp: object = {}, extra: object = {}): string {
+  const now = ctx.now();
+  const ws = ctx.db.select().from(workspaces).get()!;
+  const offerId = `off_${now}`;
+  ctx.db
+    .insert(offers)
+    .values({
+      id: offerId,
+      workspaceId: ws.id,
+      name: 'X',
+      websiteUrl: 'https://x.com',
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+  const id = `ofv_${now}`;
+  ctx.db
+    .insert(offerVersions)
+    .values({
+      id,
+      offerId,
+      workspaceId: ws.id,
+      version: 1,
+      status: 'approved',
+      source: 'human',
+      data: draft({ icp: { ...draft().icp, ...icp }, ...extra }),
+      createdAt: now,
+      updatedAt: now,
+      approvedAt: now,
+    })
+    .run();
+  return id;
+}

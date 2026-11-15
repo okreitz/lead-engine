@@ -143,6 +143,44 @@ export function createAccount(
   return { id, created: true };
 }
 
+/**
+ * Creates the account for an existing (universe) company without touching the company row.
+ * Returns the existing account when there is one.
+ */
+export function createAccountForCompany(
+  tx: Tx,
+  workspaceId: string,
+  companyId: string,
+  firstSource: 'manual' | 'personas' | 'visits' | 'conversations',
+  now: number,
+): { id: string; created: boolean } {
+  const ws = workspaceRow(tx, workspaceId);
+  const company = tx.select().from(companies).where(eq(companies.id, companyId)).get();
+  if (!company) throw new CrmError('not_found', 'company not found', 404);
+  requireUs(company.country, ws.allowedCountries);
+  const existing = tx
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(and(eq(accounts.workspaceId, workspaceId), eq(accounts.companyId, companyId)))
+    .get();
+  if (existing) return { id: existing.id, created: false };
+  const id = newId('acc');
+  tx.insert(accounts)
+    .values({
+      id,
+      workspaceId,
+      companyId,
+      stage: stagesOf(ws.settings)[0]!,
+      firstSource,
+      firstSourceAt: now,
+      status: 'active',
+      createdAt: now,
+      updatedAt: now,
+    })
+    .run();
+  return { id, created: true };
+}
+
 export interface AccountFilters {
   q?: string | undefined;
   /** Values within one filter are OR; separate filters are AND (docs/ui.md §3.2). */

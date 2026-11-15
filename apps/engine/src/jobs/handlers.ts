@@ -1,6 +1,7 @@
 import type { AppContext } from '../api/context.ts';
 import { Crawler } from '../crawler/crawler.ts';
 import { offerDraftHandler } from '../offer/draft.ts';
+import { personaFitHandler } from '../persona/run.ts';
 import { universeImportHandler } from '../universe/import.ts';
 import type { JobHandler } from './queue.ts';
 
@@ -11,5 +12,6 @@ export function jobHandlers(ctx: AppContext): Record<string, JobHandler> {
   return {
     'offer.draft': offerDraftHandler(getCrawler),
     'universe.import': universeImportHandler(),
+    'persona.fit': personaFitHandler(getCrawler),
   };
 }

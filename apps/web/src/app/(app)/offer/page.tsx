@@ -51,7 +51,14 @@ export default function OffersPage() {
 
   return (
     <div className="flex max-w-3xl flex-col gap-4">
-      <h1 className="text-2xl font-semibold tracking-tight">Offer profile</h1>
+      <div className="flex items-baseline justify-between">
+        <h1 className="text-2xl font-semibold tracking-tight">Offer profile</h1>
+        {list.data?.some((o) => o.approvedVersion) ? (
+          <Link href="/find" className="text-sm font-medium underline-offset-4 hover:underline">
+            Find matching companies →
+          </Link>
+        ) : null}
+      </div>
       <p className="text-muted-foreground text-sm">
         Enter your website. The engine reads the homepage and up to 5 key pages, drafts the offer,
         ICP, personas and intent phrases, and you edit and approve it. Streams use only the approved

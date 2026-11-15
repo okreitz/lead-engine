@@ -2,6 +2,7 @@ import type { Config } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import type { Crawler } from '../crawler/crawler.ts';
 import type { LlmAdapter } from '../llm/types.ts';
+import type { TechDetector } from '../persona/tech.ts';
 import type { DownloadFetch } from '../universe/files.ts';
 
 /** Everything route handlers and jobs need. Tests build one with fakes. */
@@ -15,4 +16,6 @@ export interface AppContext {
   crawler?: Crawler;
   /** Dataset download override (tests serve fixture files). */
   download?: DownloadFetch;
+  /** Technographics override (tests use a fake httpx). */
+  tech?: TechDetector;
 }
