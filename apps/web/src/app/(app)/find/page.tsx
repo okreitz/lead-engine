@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { EmptyState } from '@/components/blocks/empty-state';
+import { WaitReason } from '@/components/blocks/key-help';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog';
@@ -358,7 +359,11 @@ function Runs({ selected, onSelect }: { selected: string | null; onSelect: (id: 
 
 function RunState({ run }: { run: Run }) {
   if (run.job?.state === 'waiting')
-    return <Badge tone="warn">waiting: {run.job.waitReason ?? 'paused'}</Badge>;
+    return (
+      <span className="text-xs text-amber-800">
+        waiting: {run.job.waitReason ? <WaitReason text={run.job.waitReason} /> : 'paused'}
+      </span>
+    );
   return <Badge tone={run.state === 'done' ? 'ok' : 'muted'}>{run.state}</Badge>;
 }
 

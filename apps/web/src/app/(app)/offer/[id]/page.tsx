@@ -1,4 +1,5 @@
 'use client';
+import { WaitReason } from '@/components/blocks/key-help';
 import type { OfferProfile, ReviewDecision, ReviewField } from '@le/shared';
 import { INTENT_KINDS, REVIEW_FIELDS } from '@le/shared';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -216,7 +217,9 @@ function VersionView({
         <CardTitle>Drafting…</CardTitle>
         <p className="text-sm">Reading the website and asking the model for a draft.</p>
         {v.job?.state === 'waiting' ? (
-          <p className="mt-2 text-sm text-amber-800">Waiting: {v.job.waitReason}</p>
+          <p className="mt-2 text-sm text-amber-800">
+            Waiting: {v.job.waitReason ? <WaitReason text={v.job.waitReason} /> : null}
+          </p>
         ) : null}
         {v.job?.lastError ? (
           <p className="text-muted-foreground mt-2 text-xs">Last error: {v.job.lastError}</p>

@@ -1,3 +1,5 @@
+import { helpFor } from '@le/shared';
+
 /** A paid call was refused because the workspace budget (or a sub-cap) is used up. */
 export class BudgetExceededError extends Error {
   override name = 'BudgetExceededError';
@@ -9,11 +11,14 @@ export class BudgetExceededError extends Error {
   }
 }
 
-/** The provider has no key for this workspace (and no instance fallback). */
+/**
+ * The provider has no key for this workspace (and no instance fallback). The message names the
+ * key and where to add it; the UI links it to the settings row and the vendor's key page.
+ */
 export class ProviderKeyMissingError extends Error {
   override name = 'ProviderKeyMissingError';
   constructor(public readonly provider: string) {
-    super(`no ${provider} key configured for this workspace`);
+    super(`no ${helpFor(provider)?.label ?? provider} key: add it in Settings → Provider keys`);
   }
 }
 
