@@ -1,3 +1,4 @@
+import type { GeoService } from '../collector/geo.ts';
 import type { Config } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import type { Crawler } from '../crawler/crawler.ts';
@@ -23,4 +24,6 @@ export interface AppContext {
   http?: HttpFetch;
   /** Waits between provider polls (tests skip them). */
   sleep?: (ms: number) => Promise<void>;
+  /** Country/ASN databases for the collector (status shown in Settings → Sites). */
+  geo?: GeoService;
 }

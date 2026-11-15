@@ -64,3 +64,16 @@ export function needsCostConfirm(estimateUsd: number, remainingUsd: number): boo
     estimateUsd > COST_CONFIRM_USD || estimateUsd > COST_CONFIRM_SHARE_OF_REMAINING * remainingUsd
   );
 }
+
+/** Intent pages a new site starts with (SPEC §5.2 step 7: pricing, demo and contact). */
+export const DEFAULT_INTENT_PAGES = [
+  { path: '/pricing', label: 'pricing' },
+  { path: '/demo', label: 'demo' },
+  { path: '/contact', label: 'contact' },
+] as const;
+
+/** Signal weights for stream 1 (SPEC §4.2 intent). Intent pages and form fills weigh more. */
+export const VISIT_WEIGHTS = { visit: 1, intentPage: 3, formIdentify: 5 } as const;
+
+/** How long a form-fill IP mapping is trusted (SPEC §5.2 "own IP map"). */
+export const IDENTIFY_TTL_DAYS = 90;

@@ -9,8 +9,9 @@ export const healthSchema = z.object({
 export type Health = z.infer<typeof healthSchema>;
 
 /**
- * Body of `POST /collect/v` sent by `p.js` (SPEC §5.2).
- * Phase 0 defines the shape only; the collector pipeline arrives in Phase 3.
+ * Body of `POST /collect/v` sent by `p.js` (SPEC §5.2). Only the path is sent (no query
+ * string), the referrer without its query, and UTM parameters. `at` is accepted for older
+ * snippets but ignored: the collector uses its own clock.
  */
 export const collectVisitSchema = z
   .object({
@@ -27,7 +28,7 @@ export const collectVisitSchema = z
       })
       .strict()
       .optional(),
-    at: z.number().int().positive(),
+    at: z.number().int().positive().optional(),
   })
   .strict();
 export type CollectVisit = z.infer<typeof collectVisitSchema>;
