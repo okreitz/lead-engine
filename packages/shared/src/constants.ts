@@ -43,7 +43,7 @@ export const DEFAULT_FIT_THRESHOLD = 60;
 export const DEFAULT_SCORE_WEIGHTS = { fit: 0.6, intent: 0.4 } as const;
 
 /** Providers that accept a workspace (BYO) key. */
-export const KEYED_PROVIDERS = ['ipapi', 'icypeas', 'serper', 'anthropic'] as const;
+export const KEYED_PROVIDERS = ['anthropic', 'aws-ses', 'icypeas', 'ipapi', 'serper'] as const;
 export type KeyedProvider = (typeof KEYED_PROVIDERS)[number];
 
 export const STREAMS = ['visits', 'conversations', 'personas', 'manual'] as const;

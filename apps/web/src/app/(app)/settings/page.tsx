@@ -194,7 +194,10 @@ function ProviderKeys({ disabled }: { disabled: boolean }) {
       setError(errorMessage(err));
     }
   };
-  const later = PROVIDER_HELP.filter((h) => h.kind === 'workspace-key' && h.status === 'later');
+  const listed = new Set(keys.data?.providers.map((p) => p.provider) ?? []);
+  const later = PROVIDER_HELP.filter(
+    (h) => h.kind === 'workspace-key' && h.status === 'later' && !listed.has(h.id),
+  );
   const instance = PROVIDER_HELP.filter((h) => h.kind === 'instance-env');
   return (
     <div className="flex flex-col gap-4">

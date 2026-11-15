@@ -2,8 +2,9 @@
  * Email waterfall (SPEC §4.3, §5.1 step 6), cheapest first:
  *   1. an address the company publishes for this person, else the domain's learned pattern,
  *      else the 3 most common permutations;
- *   2. verify with Reacher when it is on (free, throttled per domain), else Icypeas
- *      email-verification (0.1 credit); an invalid candidate moves to the next one, while a
+ *   2. verify with Reacher when it is on (free, throttled per domain), then Amazon SES Email
+ *      Validation ($0.01) when the workspace has an SES key; Icypeas email-verification
+ *      (0.1 credit) only when neither is available; an invalid candidate moves to the next one, while a
  *      catch-all/unknown/risky answer stops (other permutations would answer the same);
  *   3. only catch-all and unknown go to the Icypeas email finder (1 credit, only when found);
  *   4. the result is stored with an `emailStatus` and a source.
@@ -22,6 +23,7 @@ import {
   type VerifyOutput,
 } from '../providers/icypeas.ts';
 import { reacherVerify } from '../providers/reacher.ts';
+import { sesVerify } from '../providers/ses.ts';
 import type { ProviderAdapter } from '../providers/types.ts';
 import { defaultHttp } from './http.ts';
 import { emailFor, permutations, splitName, type PatternId } from './names.ts';
@@ -29,11 +31,14 @@ import { emailFor, permutations, splitName, type PatternId } from './names.ts';
 export type EmailStatus =
   'verified' | 'pattern_verified' | 'risky' | 'catch_all' | 'unknown' | 'invalid';
 
+export type VerifierName = 'reacher' | 'aws-ses' | 'icypeas';
+
 export interface EmailProviders {
-  verifier: ProviderAdapter<VerifyInput, VerifyOutput> | null;
+  /** Tried in order per candidate until one gives a definite answer. */
+  verifiers: ProviderAdapter<VerifyInput, VerifyOutput>[];
   finder: ProviderAdapter<FindInput, FindOutput> | null;
   /** Shown in the UI and estimates. */
-  verifierName: 'reacher' | 'icypeas' | null;
+  verifierNames: VerifierName[];
 }
 
 const hasKey = (ctx: AppContext, workspaceId: string, provider: string) =>
@@ -45,30 +50,35 @@ const hasKey = (ctx: AppContext, workspaceId: string, provider: string) =>
 
 let reacherSingleton: ProviderAdapter<VerifyInput, VerifyOutput> | null = null;
 
-/** Reacher when enabled (flag off by default), else Icypeas when the workspace has a key. */
+/**
+ * Verifiers in waterfall order (SPEC §5.1 step 6): Reacher when its flag is on, then Amazon SES
+ * Email Validation when the workspace has an SES key; Icypeas verification only when neither is
+ * available. The Icypeas finder is used for catch-all or still-unknown results.
+ */
 export function emailProviders(ctx: AppContext, workspaceId: string): EmailProviders {
   const http = ctx.http ?? defaultHttp;
   const sleep = ctx.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const icy = hasKey(ctx, workspaceId, 'icypeas');
-  let verifier: EmailProviders['verifier'] = null;
-  let verifierName: EmailProviders['verifierName'] = null;
+  const verifiers: EmailProviders['verifiers'] = [];
+  const verifierNames: VerifierName[] = [];
   if (ctx.config.reacher.enabled) {
-    reacherSingleton ??= reacherVerify({
-      url: ctx.config.reacher.url,
-      secret: ctx.config.reacher.secret,
-      http,
-      now: ctx.now,
-      domainIntervalMs: ctx.config.reacher.domainIntervalMs,
-    });
-    verifier = ctx.http
-      ? reacherVerify({ ...ctx.config.reacher, http, now: ctx.now })
-      : reacherSingleton;
-    verifierName = 'reacher';
-  } else if (icy) {
-    verifier = icypeasVerify({ http, sleep });
-    verifierName = 'icypeas';
+    if (ctx.http) {
+      verifiers.push(reacherVerify({ ...ctx.config.reacher, http, now: ctx.now }));
+    } else {
+      reacherSingleton ??= reacherVerify({ ...ctx.config.reacher, http, now: ctx.now });
+      verifiers.push(reacherSingleton);
+    }
+    verifierNames.push('reacher');
   }
-  return { verifier, finder: icy ? icypeasFind({ http, sleep }) : null, verifierName };
+  if (hasKey(ctx, workspaceId, 'aws-ses')) {
+    verifiers.push(sesVerify({ http, sleep, now: ctx.now }));
+    verifierNames.push('aws-ses');
+  }
+  if (!verifiers.length && icy) {
+    verifiers.push(icypeasVerify({ http, sleep }));
+    verifierNames.push('icypeas');
+  }
+  return { verifiers, finder: icy ? icypeasFind({ http, sleep }) : null, verifierNames };
 }
 
 export interface EmailResult {
@@ -140,24 +150,22 @@ export async function findEmail(
       : permutations(name, input.domain, 3);
 
   let best: { email: string; status: EmailStatus; source: string } | null = null;
-  if (p.verifier) {
-    for (const email of candidates) {
-      const r = await callProvider(ctx, p.verifier, { email, domain: input.domain }, opts);
-      if (r.status === 'suppressed')
-        return { email: null, status: null, source: 'none', confidence: 0, note: r.reason };
-      const status = statusOf(r.value.verdict, generated);
-      if (status === 'verified' || status === 'pattern_verified')
-        return {
-          email,
-          status,
-          source: p.verifier.provider,
-          confidence: CONFIDENCE[status],
-          note: '',
-        };
-      if (status === 'invalid') {
-        continue;
+  if (p.verifiers.length) {
+    candidates: for (const email of candidates) {
+      let answer: { status: EmailStatus; source: string } | null = null;
+      for (const v of p.verifiers) {
+        const r = await callProvider(ctx, v, { email, domain: input.domain }, opts);
+        if (r.status === 'suppressed')
+          return { email: null, status: null, source: 'none', confidence: 0, note: r.reason };
+        answer = { status: statusOf(r.value.verdict, generated), source: v.provider };
+        // A definite answer ends the chain; risky/unknown asks the next verifier.
+        if (['verified', 'pattern_verified', 'invalid', 'catch_all'].includes(answer.status)) break;
       }
-      best = { email, status, source: p.verifier.provider };
+      if (!answer) break;
+      if (answer.status === 'verified' || answer.status === 'pattern_verified')
+        return { email, ...answer, confidence: CONFIDENCE[answer.status], note: '' };
+      if (answer.status === 'invalid') continue candidates;
+      best = { email, ...answer };
       break;
     }
   } else if (input.existing) {
@@ -168,7 +176,7 @@ export async function findEmail(
 
   const finderApplies = best
     ? best.status === 'catch_all' || best.status === 'unknown'
-    : !p.verifier;
+    : !p.verifiers.length;
   if (p.finder && finderApplies) {
     const words = input.fullName.replace(/[,()]/g, ' ').trim().split(/\s+/);
     try {
@@ -203,8 +211,8 @@ export async function findEmail(
     status: null,
     source: 'none',
     confidence: 0,
-    note: p.verifier
+    note: p.verifiers.length
       ? 'every candidate address was invalid'
-      : 'no verifier: add an Icypeas key or enable Reacher',
+      : 'no verifier: add an Amazon SES or Icypeas key, or enable Reacher',
   };
 }

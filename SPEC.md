@@ -192,7 +192,8 @@ AuditLog        { id, workspaceId?, userId?, action, target, at, details }
 6. **Email:**
    1. Learn the domain's email pattern from addresses published on its site.
    2. Generate permutations.
-   3. Verify with Reacher when it is enabled (`LE_REACHER=on`, compose profile `reacher`, image pinned to v0.11.11). It sits behind a config flag that is **off by default** until outbound port 25 is confirmed, and runs at low volume with per-domain throttling (one check per domain per minute). Its `safe` / `risky` / `invalid` / `unknown` results plus `smtp.is_catch_all` map onto `emailStatus` as in `docs/providers.md`. With Reacher off, Icypeas email-verification (0.1 credit) is the verifier.
+   3. Verify with Reacher when it is enabled (`LE_REACHER=on`, compose profile `reacher`, image pinned to v0.11.11). It sits behind a config flag that is **off by default** until outbound port 25 is confirmed, and runs at low volume with per-domain throttling (one check per domain per minute). Its `safe` / `risky` / `invalid` / `unknown` results plus `smtp.is_catch_all` map onto `emailStatus` as in `docs/providers.md`. With neither Reacher nor SES configured, Icypeas email-verification (0.1 credit) is the verifier.
+      Then Amazon SES Email Validation ($0.01 per address) when the workspace has an SES key (validation only; SES sending is out of scope). It has no catch-all signal.
    4. Only `catch_all` and `unknown` go to Icypeas email-finder, within budget. (Icypeas verification can't tell catch-all from unknown: both come back as `not_found` and are stored as `unknown`.) Only the email, certainty and status are kept from an Icypeas response; any LinkedIn-derived field is dropped before storage.
    5. Store each result with an `emailStatus` and a source.
 7. **Hiring signal** (optional): career pages and ATS job boards (Greenhouse, Lever, Ashby public JSON) for roles that match the offer's pain points. No LinkedIn.

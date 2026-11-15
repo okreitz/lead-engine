@@ -600,3 +600,125 @@ Base `https://app.icypeas.com/api`, JSON bodies, HTTPS. (docs: https://api-doc.i
 - Version: `v1.12.0` (2026-09-08) (live: proxy.golang.org `@latest`; Docker Hub `projectdiscovery/httpx:v1.12.0`).
 - Licence: **MIT** (live: LICENSE.md, "Copyright (c) 2021 ProjectDiscovery, Inc."). Tech fingerprints come via `wappalyzergo` (MIT) using data from `enthec/webappanalyzer` (**GPL-3.0**) — fine for running the binary; GPL-3 is AGPL-compatible if data were copied.
 - Name clash: the Python `httpx` package also installs an `httpx` CLI. Resolve the binary by absolute path/configured path in `commands.ts`.
+
+---
+
+## Amazon SES Email Validation (checked 2026-11-15)
+
+Labels as above. Added to Phase 2 on Olaf's approval: an optional verifier between Reacher and Icypeas.
+
+#### A1. Operation, HTTP, SDK client
+- **Operation:** `GetEmailAddressInsights`, SES **API v2** (service id `sesv2-2019-09-27`). (docs: https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_GetEmailAddressInsights.html, checked 2026-11-15)
+- **HTTP:** `POST /v2/email/email-address-insights/` (docs show a trailing slash), `Content-type: application/json`, no URI params. (docs: same)
+  - The JS SDK's own serializer uses `POST /v2/email/email-address-insights` (no trailing slash) and SigV4 signing name `ses`. (live: `@aws-sdk/client-sesv2@3.1169.0` `dist-cjs/index.js`)
+- **Endpoint host:** `email.<region>.amazonaws.com` (e.g. `email.us-east-1.amazonaws.com`; also `email.<region>.api.aws` and FIPS variants). (docs: https://docs.aws.amazon.com/general/latest/gr/ses.html, checked 2026-11-15)
+- **SDK:** `@aws-sdk/client-sesv2` → `GetEmailAddressInsightsCommand` (file `dist-types/commands/GetEmailAddressInsightsCommand.d.ts` present). (live) Reference page https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/client/sesv2/command/GetEmailAddressInsightsCommand/ returns 200. (live)
+- **CLI:** `aws sesv2 get-email-address-insights --email-address user@example.com --region us-east-1`. (docs: https://docs.aws.amazon.com/ses/latest/dg/email-validation-api.html, checked 2026-11-15)
+- **Request body:** `{ "EmailAddress": string }` (required). No other fields. (docs: API_GetEmailAddressInsights)
+- **Response body (200):**
+  ```json
+  { "MailboxValidation": {
+      "IsValid": { "ConfidenceVerdict": "LOW|MEDIUM|HIGH" },
+      "Evaluations": {
+        "HasValidSyntax":     { "ConfidenceVerdict": "..." },
+        "HasValidDnsRecords": { "ConfidenceVerdict": "..." },
+        "MailboxExists":      { "ConfidenceVerdict": "..." },
+        "IsRoleAddress":      { "ConfidenceVerdict": "..." },
+        "IsDisposable":       { "ConfidenceVerdict": "..." },
+        "IsRandomInput":      { "ConfidenceVerdict": "..." } } } }
+  ```
+  Every field is **Required: No** in the type pages (`MailboxValidation`, `EmailAddressInsightsMailboxEvaluations`, `EmailAddressInsightsVerdict`), so parse all of them as optional. (docs: https://docs.aws.amazon.com/ses/latest/APIReference-V2/API_MailboxValidation.html, …/API_EmailAddressInsightsMailboxEvaluations.html, …/API_EmailAddressInsightsVerdict.html, checked 2026-11-15)
+- **Errors:** `BadRequestException` 400, `TooManyRequestsException` 429, plus common errors. (docs: API_GetEmailAddressInsights)
+
+#### A2. Result values
+- `ConfidenceVerdict` valid values: `LOW | MEDIUM | HIGH`. (docs: API_EmailAddressInsightsVerdict)
+- **`IsValid` (overall verdict):** HIGH = high delivery likelihood, MEDIUM = moderate, LOW = low. (docs: email-validation-api.html) The AWS blog adds: HIGH "passed all critical validation checks"; MEDIUM "passed basic validation but has characteristics that might affect deliverability (such as being a role address or having uncertain mailbox existence)"; LOW "failed one or more critical validation checks". (docs: https://aws.amazon.com/blogs/messaging-and-targeting/how-to-improve-email-sender-reputation-with-amazon-ses-email-validation/, posted 2026-01-16, checked 2026-11-15)
+- **Per-check verdicts mean "strength of indication"**, not pass/fail: e.g. `IsRandomInput: HIGH` = very likely random; `LOW` = weak/no indication. So for `IsRoleAddress`, `IsDisposable`, `IsRandomInput` **HIGH is bad**; for `HasValidSyntax`, `HasValidDnsRecords`, `MailboxExists` HIGH is good. (docs: email-validation-api.html)
+- **Syntax:** `HasValidSyntax` (RFC 5321/5322 per blog). **DNS/MX:** `HasValidDnsRecords` ("domain exists, has valid DNS records, and is configured to receive email"; blog: MX and corresponding A records). **Mailbox existence:** `MailboxExists` ("without actually sending an email"; blog says it "Predicts"). **Role:** `IsRoleAddress` (admin@, support@, info@). **Disposable:** `IsDisposable`. **Random:** `IsRandomInput`. (docs: email-validation-api.html, blog)
+- **Catch-all / accept-all:** **no field for it.** Neither the API reference nor the guide nor the blog mention catch-all or accept-all (searched "catch", "accept-all"). [unverified: how a catch-all domain is reported; presumably a MEDIUM `MailboxExists`/`IsValid`, not documented]. No "unknown" verdict either; there are only the three values.
+
+#### A3. Limits, regions, prerequisites
+- **Rate:** no validation-specific quota is documented. The general SES quota says all API actions except `SendEmail`/`SendBulkEmail` "are throttled at one request per second", **not adjustable**. (docs: https://docs.aws.amazon.com/ses/latest/dg/quotas.html, checked 2026-11-15) So plan for **1 req/s per account per region** and handle 429. [unverified: whether `GetEmailAddressInsights` has its own, different limit]
+- **Regions:** "Email validation is available in all AWS Regions where Amazon SES is available." (docs: https://aws.amazon.com/about-aws/whats-new/2025/12/amazon-ses-email-validation/, checked 2026-11-15). Plan-included quotas and Auto Validation are per account per region. (docs: pricing page, blog)
+- **Sandbox / production access:** "the Email Validation API works with an AWS account that is in the Amazon SES sandbox". (docs: blog above) The blog lists "at least one verified email address or domain" among its walkthrough prerequisites, but the API reference and guide do not say a verified identity is required for `GetEmailAddressInsights`. [unverified: whether a call succeeds with zero verified identities]
+- **Opt-in:** API validation needs no enabling step in the docs (just IAM permission and a call). Auto Validation is separate and is switched on per region with `PutAccountSuppressionAttributes` (`ValidationAttributes.ConditionThreshold`). (docs: https://docs.aws.amazon.com/ses/latest/dg/email-validation-auto.html, checked 2026-11-15)
+
+#### A4. Price
+- **À la carte: $0.01 per email address validated using API or console.** (Auto Validation: $0.01 per 1,000.) (docs: https://aws.amazon.com/ses/pricing/, checked 2026-11-15)
+- Plans: Pro ($105/account/region/month) includes 2,500 API validations/account/region/month; Enterprise ($500) 5,000; extra at $0.01. (docs: pricing)
+- **No validation-specific free tier.** Only the general AWS Free Tier: new customers get up to $200 in credits usable on SES; credits must be used within 12 months. (docs: pricing)
+- → $50 budget = 5,000 validations max. Ledger cost per call: **$0.01** flat.
+
+#### A5. IAM
+- Action: **`ses:GetEmailAddressInsights`**, access level **Read**, **no resource types** (so `"Resource": "*"`), condition key **`ses:ApiVersion`** only. (docs: https://docs.aws.amazon.com/service-authorization/latest/reference/list_sesv2.html, checked 2026-11-15)
+- The SES guide's sample policy also grants `iam:CreateServiceLinkedRole` "to enable CloudWatch metrics publishing for validation activity". (docs: email-validation-api.html) For least privilege, `ses:GetEmailAddressInsights` on `*` alone should be enough to call the API. [unverified: whether the first call fails without `iam:CreateServiceLinkedRole`]
+- Least-privilege policy:
+  ```json
+  {"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"ses:GetEmailAddressInsights","Resource":"*"}]}
+  ```
+  Optionally add `"Condition":{"StringEquals":{"aws:RequestedRegion":"us-east-1"}}` (global key) to pin a region.
+
+#### A6. Terms
+- **Nothing validation-specific** in the SES section (§15) of AWS Service Terms (Last Updated November 5, 2026). §15.4: AWS may suspend SES for AUP breaches, abusive/low-quality email, bounces, complaints. §15.6: AWS is not the CAN-SPAM "sender". (docs: https://aws.amazon.com/service-terms/, checked 2026-11-15)
+- AWS AUP forbids using services "to distribute, publish, send, or facilitate the sending of unsolicited mass email or other messages, promotions, advertising, or solicitations (or 'spam')". (docs: https://aws.amazon.com/aup/, checked 2026-11-15) Validating prospect emails for cold outreach arguably "facilitates" sending; that's a judgement call, not explicit text.
+- No text found saying validation may only be used on your own lists or on addresses you'll send through SES. The feature is described as protecting **your SES sender reputation** (sign-up forms, list cleaning). [unverified: any separate Email Validation addendum; none linked from the guide or pricing page]
+
+#### A7. Package weight / SigV4 alternative
+| Package | Version (npm today) | Unpacked size | Direct deps | Installed (`npm i --ignore-scripts`) |
+|---|---|---|---|---|
+| `@aws-sdk/client-sesv2` | 3.1169.0 (modified 2026-11-13) | 2,004,400 B | 9 | **24 packages, 19 MB** on disk |
+| `aws4fetch` | 1.0.20 (2024-08-28) | 65,541 B | 0 | 1 package, 96 KB |
+| `@smithy/signature-v4` | 5.7.5 (2026-10-29) | 106,908 B | 3 | 4 packages, 8.3 MB |
+| `aws4` (Node, mhart) | 1.13.2 | 23,399 B | 0 | — |
+(live: `npm view`, local install in scratchpad)
+- **Hand-signed SigV4 is reasonable:** one JSON POST, one region, a fixed signing name `ses` (live: SDK source). `aws4fetch` maps host prefix `email` → service `ses` automatically (live: its `dist/aws4fetch.esm.mjs`). It uses `fetch` + WebCrypto (Node 18+). It fits the "all paid calls through `apps/engine/src/providers/`, undici" rule better than the 24-package SDK. [unverified: a real signed call; no keys were used]
+
+---
+
+### SES → `emailStatus` mapping (as implemented in `providers/ses.ts`)
+SES returns LOW/MEDIUM/HIGH confidence per check; for the trait checks HIGH means the trait applies. It has **no catch-all signal**, so it never yields `catch_all`.
+| SES result | Verdict | `Contact.emailStatus` |
+|---|---|---|
+| `HasValidSyntax`, `HasValidDnsRecords` or `MailboxExists` = LOW, or `IsValid` = LOW | invalid | `invalid` (next candidate) |
+| `IsDisposable`, `IsRandomInput` or `IsRoleAddress` = HIGH | risky | `risky` |
+| `IsValid` = HIGH (and none of the above) | valid | `verified` (published or found) / `pattern_verified` (generated) |
+| `IsValid` = MEDIUM, or fields missing | unknown | `unknown` → Icypeas finder |
+
+### Least-privilege IAM policy for the workspace key
+Create an IAM user with only this policy, then an access key ("Other"), and enter the key ID, secret and SES region in Settings → Provider keys:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Action": "ses:GetEmailAddressInsights", "Resource": "*" }
+  ]
+}
+```
+The action has no resource types, so `Resource` must be `"*"`. The SES guide's sample adds `iam:CreateServiceLinkedRole` for CloudWatch metrics; whether calls fail without it is [unverified], so start without it and add it only if AWS asks.
+
+### Notes from the check
+- Stack Exchange: the 2025 Stack Apps help says to send the key as `Authorization: Bearer` and generate it with "Generate API Key" (new dashboard). providers.md says `key=` is optional and points to `/apps/oauth/register`. Re-check which auth style v2.3 accepts with `LE_E2E=1`.
+- SES validation reports **no catch-all**, so it can't fill `Contact.emailStatus = catch_all` (Reacher's `smtp.is_catch_all` can).
+
+---
+
+## Getting your keys
+
+<!-- generated:provider-help -->
+Generated from `PROVIDER_HELP` in `packages/shared/src/provider-help.ts` (links checked 2026-11-15). "docs" means the vendor has no direct key page.
+
+| Provider | Where it goes | Used for | Cost | Link | Minimum scope |
+|---|---|---|---|---|---|
+| Anthropic API | Settings → Provider keys | LLM for offer drafts, fit scoring and people extraction | pay as you go; claude-haiku-5-5 is $0.10 / $0.50 per million input / output tokens | [create](https://platform.claude.com/settings/keys) | no scopes; set a monthly spend limit in the Claude Console as a second cap |
+| Amazon SES | Settings → Provider keys | Email validation (SES Email Validation API), before Icypeas; never sending | $0.01 per address validated; no free tier for validation | [create](https://console.aws.amazon.com/iam/home#/users) | an IAM user whose only policy allows ses:GetEmailAddressInsights on Resource "*"; create an access key ("Other"), then enter the key ID, secret and SES region |
+| Icypeas | Settings → Provider keys | Email finder (and verifier when neither Reacher nor SES is set); never Find People | from $19/month for 1,000 credits; verify 0.1 credit, find 1 credit only when found | [create](https://app.icypeas.com/bo/api) | turn on "Activate API Access", then copy the API key (no scopes) |
+| ipapi.is (later phase) | Settings → Provider keys | Website visitor company lookup (stream 1, Phase 3) | free key: 1,000 lookups/day, commercial use allowed | [create](https://ipapi.is/app/signup) | no scopes; the key is shown at ipapi.is/app after signup |
+| Serper (later phase) | Settings → Provider keys | Reddit threads via Google search (stream 2, Phase 4) | 2,500 free queries, no card; paid packs start at $50 (capped at $0 here) | [create](https://serper.dev/api-keys) | no scopes |
+| Stack Exchange (later phase) | Settings → Provider keys | Stack Exchange question search (stream 2, Phase 4) | free; 10,000 requests/day with a key | [create](https://stackapps.com/apps/oauth/register) | register an app, then "Generate API Key"; read-only, no OAuth needed |
+| GitHub (later phase) | Settings → Provider keys | Issue search (stream 2, Phase 4) | free; 30 searches/minute with a token | [create](https://github.com/settings/personal-access-tokens/new) | fine-grained token, "Public repositories" access, no permissions |
+| IPinfo Lite (later phase) | Settings → Provider keys | Optional country/ASN database instead of DB-IP (stream 1) | free; CC BY-SA 4.0, attribution required | [create](https://ipinfo.io/signup) | no scopes; the token is at ipinfo.io/dashboard/token |
+| SAM.gov (later phase) | Settings → Provider keys | Optional monthly entity extract (not built yet) | free; 10 requests/day without a SAM.gov role | [docs](https://open.gsa.gov/api/entity-api/) | public API key from your SAM.gov Account Details page (shown once after re-entering your password) |
+| SEC EDGAR User-Agent | LE_SEC_USER_AGENT | EDGAR import and officers; SEC requires a declared contact instead of a key | free; at most 10 requests/second | [docs](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data) | a contact like "Lead Engine admin@yourdomain.com" |
+| People Data Labs company dataset | Settings → Company data (download link) | Company universe import; no key, a download form | free; CC BY 4.0 | [create](https://www.peopledatalabs.com/company-dataset) | request the US file; paste the link they send into Settings → Company data |
+<!-- /generated:provider-help -->
+

@@ -11,6 +11,7 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { audit } from '../../audit.ts';
+import { parseSesKey } from '../../providers/ses.ts';
 import { hashPassword } from '../../auth/passwords.ts';
 import { setSessionWorkspace } from '../../auth/sessions.ts';
 import { encryptSecret, MasterKeyMissingError } from '../../crypto/secrets.ts';
@@ -318,6 +319,13 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: AppContext): 
     const workspaceId = auth.workspaceId!;
     const { provider } = parse(providerParam, request.params);
     const { key } = parse(providerKeyBodySchema, request.body);
+    if (provider === 'aws-ses' && !parseSesKey(key)) {
+      throw new HttpError(
+        400,
+        'invalid_key',
+        'enter the AWS access key ID, secret access key and an SES region such as us-east-1',
+      );
+    }
     let encryptedKey: string;
     try {
       encryptedKey = encryptSecret(ctx.config.masterKey, workspaceId, provider, key);

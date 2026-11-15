@@ -27,7 +27,12 @@ export function KeyHelp({ help }: { help: ProviderHelp }) {
       </span>
       <span>
         <ExternalLink href={help.createUrl}>
-          {help.createUrlIsDocs ? 'How to get it' : 'Create the key'} ↗
+          {help.createUrlIsDocs
+            ? 'How to get it'
+            : help.kind === 'workspace-key'
+              ? 'Create the key'
+              : 'Open the page'}{' '}
+          ↗
         </ExternalLink>
         {help.createUrlIsDocs ? ' (no direct page; vendor docs)' : ''}
         {help.scope ? ` · Minimum scope: ${help.scope}` : ''}

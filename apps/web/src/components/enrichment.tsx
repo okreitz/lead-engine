@@ -14,7 +14,7 @@ interface Enrichment {
     usd: number;
     perContactUsd: number;
     provider: string;
-    verifier: 'reacher' | 'icypeas' | null;
+    verifier: string | null;
     finder: 'icypeas' | null;
     confirm: boolean;
   };
