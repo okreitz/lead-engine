@@ -104,6 +104,7 @@ export interface AccountDetail {
     sizeRange: string | null;
     foundedYear: number | null;
     tech: string[];
+    ticker?: string | null;
   };
   contacts: Contact[];
   deals: {

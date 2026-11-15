@@ -23,6 +23,13 @@ const envSchema = z.object({
   LE_JOBS: z.enum(['on', 'off']).default('on'),
   /** Fallback Anthropic API key for the `anthropic-api` adapter (workspace keys take precedence). */
   ANTHROPIC_API_KEY: z.string().optional(),
+  /** Folder for dataset downloads (company universe import). Default: `imports/` next to the DB. */
+  LE_IMPORTS_DIR: z.string().optional(),
+  /**
+   * SEC EDGAR requires a declared User-Agent with a contact address, e.g.
+   * "Lead Engine admin@yourdomain.com" (docs/providers.md). EDGAR features are off without it.
+   */
+  LE_SEC_USER_AGENT: z.string().min(5).optional(),
 });
 
 export interface Config {
@@ -37,6 +44,8 @@ export interface Config {
   cookieSecure: 'auto' | 'true' | 'false';
   jobs: boolean;
   anthropicApiKey: string | null;
+  importsDir: string;
+  secUserAgent: string | null;
 }
 
 /** True for loopback binds, where first-user setup needs no token. */
@@ -69,5 +78,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     cookieSecure: parsed.LE_COOKIE_SECURE,
     jobs: parsed.LE_JOBS === 'on',
     anthropicApiKey: parsed.ANTHROPIC_API_KEY ?? null,
+    importsDir: path.resolve(
+      parsed.LE_IMPORTS_DIR ?? path.join(path.dirname(path.resolve(parsed.LE_DB_PATH)), 'imports'),
+    ),
+    secUserAgent: parsed.LE_SEC_USER_AGENT ?? null,
   };
 }

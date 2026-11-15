@@ -384,3 +384,219 @@ Record the date, the output and the decision in `docs/decisions.md`.
 - Never retry quickly against the same domain. Treat greylisting as `unknown` and requeue it hours later.
 - The SMTP conversation stops after `RCPT TO`; no mail is sent. Use a real `RCH__HELLO_NAME` and `RCH__FROM_EMAIL` on a domain with matching reverse DNS.
 - High volume from one IP gets it blocklisted and, with it, the VPS's other mail. Low volume protects both us and the receiving servers.
+
+---
+
+## Phase 2 verification (2026-11-15)
+
+Checked **2026-11-15** from the build container. Labels: **(live)** = called from this container, response seen; **(docs: URL)** = vendor's own page fetched today; **[unverified: …]** = not confirmed, says what was tried. No accounts, no keys, nothing spent.
+
+### Headline findings (things that change code or config)
+
+1. **Reacher `reacherhq/backend:latest` on Docker Hub is the v0.11.8 image (pre-MIT, dual-licence).** Digest of `latest` = `sha256:6f05f029…` = `v0.11.8`. MIT starts at v0.11.9. **Pin `reacherhq/backend:v0.11.11`** (digest `sha256:658de20f…`, amd64, ~426 MB) (live: hub.docker.com tags API; licence text at tags via raw.githubusercontent.com).
+2. **The Reacher image is built on `zenika/alpine-chrome:123` and its `docker.sh` starts `chromedriver &` before the backend.** This conflicts with "No Chromium on the VPS by default"; Chromium only drives *headless* checks (Hotmail B2C, Yahoo), but the binary and chromedriver process are in the container. Options: accept it as an opt-in sidecar (Reacher is already off by default), or build our own image from the MIT source without Chrome. (docs: backend/Dockerfile, backend/docker.sh on master)
+3. **Icypeas with no `Authorization` header returns HTTP 200** `{"success":false,"validationErrors":[{"field":"type","message":"insufficient_credits","type":"InsufficientCredits",…}]}`, **not 401**. An invalid key returns **401** with `code: "user_not_found_error"` (not the documented `unauthorized_access_error`). The adapter must treat both as auth/credit failures. (live)
+4. **SAM.gov "D&B Open Data"** (Legal Business Name, street, city, state, ZIP, country, county) may be used with written attribution to D&B but **not "in bulk … as an original source or as a substitute"**; all other D&B data is banned for "commercial, resale or marketing purposes (e.g., identifying, quantifying, segmenting and/or analyzing customers and prospective customers)". D&B-supplied records = registrations last updated **before 2022-04-04**, flagged by `ENTITY EVS SOURCE = "D&B"` (col 122) and `D&B OPEN DATA FLAG = Y` (col 24). ⇒ drop rows with EVS source `D&B` or D&B flag `Y`. (docs: https://open.gsa.gov/api/entity-api/ disclaimer; layout xlsx)
+5. **Form 4 raw XML filename is not always `form4.xml`** and booleans come as both `true/false` and `1/0`. (live)
+6. **PDL free dataset has no direct download URL**; it is gated by a lead form (form id 478840). The Acceptable Data Use Policy page is JS-only and could not be read. (live)
+
+---
+
+### 1. Icypeas
+
+Base `https://app.icypeas.com/api`, JSON bodies, HTTPS. (docs: https://api-doc.icypeas.com/llms.txt)
+
+#### Auth (docs: https://api-doc.icypeas.com/authentication.md)
+- `Authorization: <api key>` — raw key, **no `Bearer`** — plus `Content-Type: application/json`.
+- Live behaviour (live, 2026-11-15, `POST /email-verification`):
+  - no header → **HTTP 200** `{"validationErrors":[{"field":"type","message":"insufficient_credits","humanReadableMessage":"Insufficient credits to run the search","type":"InsufficientCredits","expected":null,"actual":null}],"success":false}`
+  - `Authorization: invalid` → **HTTP 401** `{"message":"The user does not exist","error":"UserNotFoundError","status":401,"code":"user_not_found_error"}`
+- Documented 401 body: `{"message":"Unauthorized access.","error":"UnauthorizedAccessError","status":401,"code":"unauthorized_access_error"}`. 429 body: `{"message":"You have exceeded the max number of requests per minute.","error":"RateLimitExceededError","status":429,"code":"rate_limit_exceeded_error"}`. (docs: reference/email-search.md)
+
+#### `POST /email-search` (docs: https://api-doc.icypeas.com/reference/email-search.md)
+- Body: `firstname` (string, may be `""` if lastname set), `lastname` (string, may be `""` if firstname set), `domainOrCompany` (string; domain preferred), optional `custom.webhookUrl` (url), `custom.externalId` (string).
+- 200 OK: `{"success":true,"item":{"_id":"…","status":"NONE"}}`.
+- 200 validation error: `{"success":false,"validationErrors":[{"expected","type","field","message"}]}`; types `required`/`string`/`url`/`stringEmpty`/`FirstLastMandatoryDiscoveryError`/`UnpaidSubscriptionError` (message `unpaid_subscription_error`, field `user`).
+- Cost: 1 credit only if found.
+
+#### `POST /email-verification` (docs: https://api-doc.icypeas.com/reference/email-verification.md)
+- Body: `email` (required), optional `custom.webhookUrl`, `custom.externalId`.
+- Same 200 `{success:true,item:{_id,status:"NONE"}}` shape; validation types `required`/`stringEmpty`/`email`/`string`/`url`/`UnpaidSubscriptionError`.
+- Cost 0.1 credit.
+
+#### `POST /bulk-single-searchs/read` (docs: https://api-doc.icypeas.com/reference/get-results.md)
+- Body for one result: `{"id":"<_id>"}`. Other params: `mode` (`single`|`bulk`), `file`, `limit` (default 10, max 100), `next` (bool), `sorts`.
+- Response: `{"success":true,"items":[{ "name","user","file","results":{"firstname","lastname","fullname","gender","emails":[{"email","certainty","mxProvider","mxRecords":[]}],"phones":[],"saasServices":[]},"order","status","system":{"createdAt","modifiedAt"},"userData":{"externalId","webhookUrl"},"_id"}],"total":n,"sorts":[…]}`.
+- Email path: `items[0].results.emails[0].email`; certainty `items[0].results.emails[0].certainty`; status `items[0].status`.
+- Read errors (HTTP 200, `success:false`): `SearchNotFoundError` (`search_not_found_error`, field `id`), `ModeOrIdShouldBeUsedError`, etc.
+
+#### Statuses (docs: https://api-doc.icypeas.com/statuses.md)
+- Running: `NONE`, `SCHEDULED`, `IN_PROGRESS` ("A search is finished when its status is **not** NONE, SCHEDULED or IN_PROGRESS").
+- Finished: `FOUND`/`DEBITED`, `NOT_FOUND`/`DEBITED_NOT_FOUND`, `BAD_INPUT`, `INSUFFICIENT_FUNDS`, `ABORTED`.
+
+#### Certainty (docs: https://api-doc.icypeas.com/certainties.md, quickstart/verify-email.md)
+| `certainty` | Applies to | Meaning |
+|---|---|---|
+| `ultra_sure` / `very_sure` | all | 99%, bounce <1% → **valid** |
+| `probable` | all | 95%, bounce <5% |
+| `undeliverable` | verification | address does not exist → **invalid** |
+| `not_found` | search / domain search | nothing found |
+| `not_found` | verification | "We can't tell whether the address exists (for example the server accepts everything)" → **catch-all and unknown are not distinguished** |
+- There is **no separate catch-all value**; catch-all and unknown both surface as `not_found` on verification. [unverified: which `status` accompanies `undeliverable` (FOUND vs NOT_FOUND) — docs do not say; no key to test]
+
+#### Sync mode
+- **None.** Docs: "Email search, email verification and domain search are asynchronous." OpenAPI paths (`/openapi.json`, live) contain no sync variant: `/email-search`, `/email-verification`, `/domain-search`, `/bulk-search`, `/bulk-single-searchs/read`, `/search-files/read`, `/a/actions/subscription-information`, plus find-people/scrape/url-search/reverse-lookup endpoints we don't use.
+- Results via polling (≥3 s between reads; **30 reads/min**) or webhooks (`custom.webhookUrl`; payload `{signature,timestamp,data:<same item as read>}`, answer HTTP 200; webhooks "don't count against any limit"). (docs: how-it-works.md, reference/webhook-search-item.md, rate-limits.md)
+- Limits: email-search 10/s, email-verification 10/s, read 30/min, bulk-search 1/s (≤5,000 rows). On 429 back off 2/4/8 s. (docs: rate-limits.md)
+
+### 2. Reacher (check-if-email-exists)
+
+#### Licence
+- `LICENSE.md` on master, v0.11.9 and v0.11.11: **MIT** ("Copyright (c) 2026 Reacher"). At v0.11.8: "dual license model … Commercial license". CHANGELOG 0.11.9 (2026-10-09): "Switch to the MIT license and remove the Commercial License Trial". (live, raw.githubusercontent.com)
+- docs.reacher.email/self-hosting/licensing: "distributed under the MIT License … including as part of proprietary software or commercial services". (docs: https://docs.reacher.email/self-hosting/licensing.md)
+
+#### Docker image (live: https://hub.docker.com/v2/repositories/reacherhq/backend/tags)
+| tag | digest | updated |
+|---|---|---|
+| `latest` | `sha256:6f05f02980c9…` (**= v0.11.8**) | 2026-10-30 |
+| `v0.11.11` (= `beta`) | `sha256:658de20fac2b…` | 2026-10-30 |
+| `v0.11.10` | `sha256:e23e3909a00a…` | 2026-10-16 |
+| `v0.11.9` | `sha256:c4629b8daa1f…` | 2026-10-10 |
+- ⇒ pin `reacherhq/backend:v0.11.11` (or digest). Size ~426 MB amd64.
+- Base image `zenika/alpine-chrome:123`, adds `chromium-chromedriver`; CMD `./docker.sh` = `chromedriver & ./reacher_backend`. Env defaults in image: `RCH__HTTP_HOST=0.0.0.0`, `RCH__WORKER__ENABLE=false`, `RUST_LOG=reacher=info`; `EXPOSE 8080`. (docs: backend/Dockerfile, backend/docker.sh on master)
+
+#### Config / env vars (docs: backend/backend_config.toml on master)
+| Setting | Env var | Default |
+|---|---|---|
+| port | `RCH__HTTP_PORT` | `8080` |
+| bind host | `RCH__HTTP_HOST` | `127.0.0.1` (image sets `0.0.0.0`) |
+| shared secret | `RCH__HEADER_SECRET` | unset; when set, "required in the `x-reacher-secret` header of all incoming requests" |
+| EHLO name | `RCH__HELLO_NAME` | `localhost` ("should match the reverse DNS of the server's IP") |
+| MAIL FROM | `RCH__FROM_EMAIL` | `hello@localhost` |
+| SMTP timeout (s) | `RCH__SMTP_TIMEOUT` | unset = wait indefinitely (**set it**, e.g. 45) |
+| SOCKS5 proxy | `RCH__PROXY__HOST`, `RCH__PROXY__PORT`, `RCH__PROXY__USERNAME`, `RCH__PROXY__PASSWORD`, `RCH__PROXY__TIMEOUT_MS` | none |
+| throttle (v1 only) | `RCH__THROTTLE__MAX_REQUESTS_PER_SECOND/_MINUTE/_HOUR/_DAY` | all commented out |
+| webdriver | `RCH__WEBDRIVER_ADDR` | `http://localhost:9515` |
+| worker (RabbitMQ) | `RCH__WORKER__ENABLE` | `false` |
+| backend name | `RCH__BACKEND_NAME` | `backend-dev` |
+- "throttle configurations only apply to /v1/* endpoints … /v0/check_email … always executes the verification immediately."
+
+#### `POST /v1/check_email` (docs: backend/openapi.json on master, info.version 0.11.0, licence MIT)
+- Request `CheckEmailRequest` (required: `to_email`): `to_email`, `from_email`, `hello_name`, `proxy` {host, port, username, password}, `smtp_port` (default 25), `gmail_verif_method`, `hotmailb2b_verif_method`, `hotmailb2c_verif_method` (`Smtp`|`Headless`), `yahoo_verif_method` (`Api`|`Headless`|`Smtp`), `check_gravatar`.
+- "Unlike /v0/check_email, the new /v1/check_email endpoint queues the email for verification … based on … throttle and concurrency." Response is still the synchronous `CheckEmailOutput` (200).
+- Auth: OpenAPI declares an `Authorization` apiKey header — that's the **SaaS**; self-hosted uses `x-reacher-secret` when `header_secret` is set (config file comment). [unverified: exact HTTP status returned on a wrong/missing secret — not run locally]
+- Response `CheckEmailOutput` (required `input, is_reachable, misc, mx, smtp, syntax`; optional `debug`):
+  - `is_reachable` enum `safe | risky | invalid | unknown`.
+  - `mx`: `{accepts_mail: bool, records: string[]}` **or** `CoreError {type, message}`.
+  - `smtp`: `{can_connect_smtp, has_full_inbox, is_catch_all, is_deliverable, is_disabled}` (all bool, required) **or** `CoreError`.
+  - `misc`: `{is_disposable, is_role_account, is_b2c?, gravatar_url, haveibeenpwned}` or `CoreError`.
+  - `syntax`: `{domain, is_valid_syntax, username, suggestion}`.
+  - ⇒ parse `smtp`/`mx`/`misc` as a union; a `CoreError` there means treat as `unknown`.
+- `risky` covers disposable, role account, catch-all, full inbox (docs: https://docs.reacher.email/getting-started/is-reachable.md) — consistent with the existing mapping in providers.md.
+- Outbound port 25 must be open (README; docs install page).
+
+### 3. ATS public job boards
+
+#### Greenhouse Job Board API
+- `GET https://boards-api.greenhouse.io/v1/boards/{token}/jobs` (live, `stripe`: HTTP 200, 490 KB, `meta.total` 785).
+- Fields per job (live): `id`, `internal_job_id`, `title`, `location.name` (free text, e.g. `"Seattle, San Francisco, New York City"`), `absolute_url`, `updated_at` (`2026-10-29T10:42:09-04:00`), `first_published`, `company_name`, `requisition_id`, `language`, `metadata`, `data_compliance`, `education`, `application_deadline`.
+- **Department/offices only with `?content=true`** (adds `content`, `departments[{id,name,parent_id,child_ids}]`, `offices[…]`) — but that response was **6.1 MB** for Stripe. Cheaper: `GET /v1/boards/{token}/departments` returns departments with nested `jobs` (live). Board info: `GET /v1/boards/{token}` → `{"name":"Stripe","content":""}` (live).
+- Non-existent board: **HTTP 404** `{"status":404,"error":"Job not found"}` (live).
+- Auth: "Job Board data is publicly available, so authentication is not required for any GET endpoints." (docs: https://developers.greenhouse.io/job-board.html)
+- Rate limit: **none documented** for GETs; no rate-limit headers seen (live). robots.txt: `Disallow: /embed/` only (live).
+- Terms: [unverified: greenhouse.com/legal is JS-rendered; /terms-of-service, /legal/terms-of-service, /api-terms, /legal/website-terms-of-use all 404. No public-consumer API terms found.]
+
+#### Lever Postings API
+- `GET https://api.lever.co/v0/postings/{site}?mode=json` (EU: `api.eu.lever.co`). Params `skip`, `limit`, `location`, `commitment`, `team`, `department`, `level`, `group`. (docs: https://raw.githubusercontent.com/lever/postings-api/master/README.md)
+- Live (`palantir`, `limit=2`): JSON **array**; fields `id`, `text` (title), `categories {commitment, location, team, department?, allLocations[]}`, `country` (ISO alpha-2, e.g. `SG`), `workplaceType` (`unspecified|on-site|remote|hybrid`), `hostedUrl`, `applyUrl`, `createdAt` (**epoch ms**, e.g. 1786469891368), descriptions (`description`, `descriptionPlain`, `opening*`, `descriptionBody*`, `lists`, `additional*`), optional `salaryRange {currency, interval, min, max}`.
+- **No updated/published date other than `createdAt`.**
+- Non-existent site: **HTTP 404** `{"ok":false,"error":"Document not found"}` (live; also `netflix`).
+- Limits: only the application POST is documented (2/s). robots.txt: `Allow: /`, **`Crawl-delay: 1`** (live) ⇒ 1 req/s.
+- README: API is for "your company"; CORS only from your own domains; no statement on third-party reading. Terms: [unverified: lever.co/terms-of-service is the customer agreement (last updated 2023-08-25); no clause about public postings consumption found.]
+
+#### Ashby Posting API
+- `GET https://api.ashbyhq.com/posting-api/job-board/{name}?includeCompensation=true|false` (docs: https://developers.ashbyhq.com/docs/public-job-posting-api.md, updated 2026-10-23).
+- Live (`ashby`, 4.4 MB; `ramp`, `notion` also 200): `{"apiVersion":"1","jobs":[…]}`; job fields `id`, `title`, `location`, `secondaryLocations[{location,address}]`, `department`, `team`, `isListed`, `isRemote`, `workplaceType` (`Remote` etc.), `employmentType` (`FullTime` …), `address.postalAddress {addressLocality, addressRegion, addressCountry}` (country free text, e.g. `"USA"`, `"European Union"`), `jobUrl`, `applyUrl`, `publishedAt` (`2024-03-04T14:29:08.532+00:00`), `descriptionHtml`, `descriptionPlain`; `compensation` only with `includeCompensation=true`.
+- `isListed:false` = "should only be available via direct link" ⇒ skip those.
+- **No updatedAt**; `publishedAt` = "ISO DateTime when the job was last published".
+- Responses are large (descriptions inline; no field selection or pagination documented).
+- Non-existent board: **HTTP 404**, body plain text `Not Found` (live).
+- Rate limits: none documented, no headers seen. `api.ashbyhq.com/robots.txt` → 401 `Unauthorized` (live); `jobs.ashbyhq.com/robots.txt` disallows `/api/` (that's the jobs site, not api host).
+- Terms: [unverified: docs page has no terms; not searched further.]
+
+### 4. People Data Labs free company dataset
+- **Download:** only via the form on https://www.peopledatalabs.com/company-dataset (live): fields first/last name, email, title, company, country, use case, checkbox "By downloading, you are accepting our Privacy Policy and Acceptable Data Use Policy". Page JS shows `freeCompanyDataset: {form_id: 478840}`. **No direct/stable file URL** in the page HTML or its 24 JS bundles (live grep for .zip/.csv/.json/s3/download). Docs: "To download … go to http://www.peopledatalabs.com/company-dataset". ⇒ manual download + local import path.
+- **Format** (docs: https://docs.peopledatalabs.com/docs/free-company-dataset.md): "CSV, pipe-delimited and JSON formats"; zipped (docs mention unzipping with 7-Zip). [unverified: exact CSV header row order, quoting, whether JSON is JSON-lines — no file downloaded]
+- **Fields and examples (docs):**
+  | field | type | example |
+  |---|---|---|
+  | `country` | enum | `united states` (lowercase) |
+  | `founded` | integer | `2015` |
+  | `id` | string | non-persistent, "generated from the company's primary LinkedIn username" |
+  | `industry` | enum (LinkedIn industries) | `computer software` |
+  | `linkedin_url` | string | `linkedin.com/company/peopledatalabs` (no scheme) |
+  | `locality` | string | `san francisco` |
+  | `name` | string | `people data labs` (lowercase) |
+  | `region` | string | `california` (full state name, lowercase) |
+  | `size` | enum | `11-50` |
+  | `website` | string | `peopledatalabs.com` (**no scheme**) |
+- `size` enum (docs: https://docs.peopledatalabs.com/docs/company-sizes.md): `1-10`, `11-50`, `51-200`, `201-500`, `501-1000`, `1001-5000`, `5001-10000`, `10001+`.
+- Licence (docs): "You may use this data for any purpose. We have released it under the terms of the Creative Commons Attribution license (CC BY 4.0)".
+- **Acceptable Data Use Policy:** [unverified: https://privacy.peopledatalabs.com/policies?name=acceptable-data-use-policy is a Transcend JS app ("please enable JS"); its backend `api.us.transcend.io/privacy-center/policies` returned 401; www.peopledatalabs.com/acceptable-data-use-policy returns an empty JS shell. Needs a browser, or ask PDL.]
+
+### 5. SEC EDGAR
+- UA: "Please declare your user agent in request headers: … User-Agent: Sample Company Name AdminContact@<sample company domain>.com"; "Current max request rate: 10 requests/second." (docs: https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data — the old /os/accessing-edgar-data redirects here). Live: curl default UA → 403; declared UA → 200.
+- `company_tickers_exchange.json` (live): `{"fields":["cik","name","ticker","exchange"],"data":[[320193,"Apple Inc.","AAPL","Nasdaq"],[1045810,"NVIDIA CORP","NVDA","Nasdaq"],…]}` — 10,404 rows; `cik` is an integer.
+- `https://data.sec.gov/submissions/CIK0000320193.json` (live) top-level keys: `addresses, category, cik, description, ein, entityType, exchanges, filings, fiscalYearEnd, flags, formerNames, insiderTransactionForIssuerExists, insiderTransactionForOwnerExists, investorWebsite, lei, name, ownerOrg, phone, sic, sicDescription, stateOfIncorporation, stateOfIncorporationDescription, tickers, website`.
+  - `cik` is a zero-padded **string** (`"0000320193"`), `sic` string (`"3571"`), `website: ""`, `investorWebsite: ""`, `phone "(408) 996-1010"`, `entityType "operating"`.
+  - `addresses.business` / `addresses.mailing`: `{street1, street2, city, stateOrCountry, zipCode, stateOrCountryDescription, isForeignLocation, foreignStateTerritory, country, countryCode}` — Apple: `CUPERTINO`, `CA`, `95014`, `isForeignLocation` null/0.
+  - `filings.recent` = parallel arrays: `accessionNumber, filingDate, reportDate, acceptanceDateTime, act, form, fileNumber, filmNumber, items, core_type, size, isXBRL, isInlineXBRL, isXBRLNumeric, primaryDocument, primaryDocDescription`. `filings.files[]` = older pages `{name, filingCount, filingFrom, filingTo}`.
+- **Form 4 raw XML URL (live):**
+  - recent row: `form "4"`, `accessionNumber "0001140361-26-043484"`, `primaryDocument "xslF345X06/form4.xml"`.
+  - `https://www.sec.gov/Archives/edgar/data/320193/000114036126043484/xslF345X06/form4.xml` → `text/html` (rendered).
+  - `https://www.sec.gov/Archives/edgar/data/320193/000114036126043484/form4.xml` → `text/xml` raw `<ownershipDocument>`.
+  - Rule: `https://www.sec.gov/Archives/edgar/data/{int(cik)}/{accession without dashes}/{basename(primaryDocument)}` (strip the `xslF345X0n/` prefix). Filename varies: TSLA's is `xslF345X06/tm2625055d1_4seq1.xml` (live). The folder listing is at `…/{accession}/index.json` (live) if needed.
+- Form 4 XML (live): root `ownershipDocument` → `schemaVersion, documentType, periodOfReport, issuer{issuerCik,issuerName,issuerTradingSymbol}, reportingOwner, …`. `reportingOwner/reportingOwnerId/rptOwnerCik`, `rptOwnerName` (`"Newstead Jennifer"` — Last First), `reportingOwnerAddress/rptOwnerStreet1…`, `reportingOwnerRelationship/{isDirector,isOfficer,isTenPercentOwner,isOther,officerTitle}`.
+  - **Booleans vary:** Apple filer agent uses `true`/`false`; MSFT and TSLA use `1`/`0` (live). Parse both.
+  - `officerTitle` examples: `SVP, GC and Government Affairs`, `EVP, Chief Marketing Officer`, `Chief Financial Officer`.
+
+### 6. SAM.gov public monthly extract
+- File names (docs: https://open.gsa.gov/api/sam-entity-extracts-api/): monthly ASCII `SAM_PUBLIC_MONTHLY_V2_YYYYMMDD.ZIP`; monthly UTF-8 `SAM_PUBLIC_UTF-8_MONTHLY_V2_YYYYMMDD.ZIP`. "produced on the first Sunday of each month. Kindly check after 7 AM Eastern"; "The date on the .ZIP file matches the date on the .dat file inside"; contents "all active entities and entities expired in the last 6 months". Request: `fileName=SAM_PUBLIC_MONTHLY_V2_…ZIP` (or `fileType` + `version=V2`). Key required, 10 req/day for a non-federal user without a role.
+- Layout (docs: https://open.gsa.gov/api/sam-entity-extracts-api/v1/SAM%20Master%20Extract%20Mapping%20v6.0%20Public%20File%20V2%20Layout.xlsx, sheet "Data Element Mapping", 142 columns):
+  | col | element | notes |
+  |---|---|---|
+  | 1 | UNIQUE ENTITY ID | 12 chars |
+  | 6 | SAM EXTRACT CODE | monthly: `A` Active, `E` Expired (= registration status) |
+  | 7 | PURPOSE OF REGISTRATION | `Z1`…`Z5` |
+  | 9 | REGISTRATION EXPIRATION DATE | YYYYMMDD |
+  | 10 | LAST UPDATE DATE | YYYYMMDD |
+  | 12 | LEGAL BUSINESS NAME | max 120 |
+  | 13 | DBA NAME | |
+  | 16–18 | PHYSICAL ADDRESS LINE 1 / LINE 2 / CITY | |
+  | 19 | PHYSICAL ADDRESS PROVINCE OR STATE | e.g. `MN` |
+  | 20 | PHYSICAL ADDRESS ZIP/POSTAL CODE | |
+  | 22 | PHYSICAL ADDRESS COUNTRY CODE | `USA` |
+  | 24 | D&B OPEN DATA FLAG | `Y`/`N`: "whether the Business Name and Physical Address sourced from D&B" |
+  | 27 | ENTITY URL | e.g. `http://www.usbank.com` (with scheme) |
+  | 33 | PRIMARY NAICS | 6 chars |
+  | 34 / 35 | NAICS CODE COUNTER / NAICS CODE STRING | `~`-separated, each code + `Y`/`N` small-business flag |
+  | 116 | EXCLUSION STATUS FLAG | `D` or null |
+  | 122 | ENTITY EVS SOURCE | e.g. `D&B` |
+  | 142 | END OF RECORD INDICATOR | `!end` |
+- **Column delimiter of the .dat: [unverified]** — the layout xlsx (public and FOUO), the extracts page and the entity-api page never state it (grep for pipe/delimit). Sub-fields inside a column use `~` and `^`. Confirm from the first real file (expect a header/footer record too — also unverified).
+- D&B (docs: https://open.gsa.gov/api/entity-api/ "Disclaimer: Limitation on Permissible Use of Dun & Bradstreet, Inc. (D&B) Data"): see headline 4. D&B Open Data = Legal Business Name, street, city, state/province name/code/abbreviation, ZIP, country name/code, county code. D&B-sourced records: "all entity registration records with a last updated date earlier than 4/4/2022 … show the Entity Validation Service (EVS) Source as D&B". ⇒ **exclude rows where col 122 = `D&B` (or col 24 = `Y`)**; for the rest, name/address/URL/NAICS are SAM data.
+
+### 7. httpx (ProjectDiscovery)
+- Flags (docs: https://raw.githubusercontent.com/projectdiscovery/httpx/main/README.md):
+  - input: `-l, -list string` (file), `-u, -target string[]`, **stdin is read by default** (`-no-stdin` disables it; docs show `cat hosts.txt | httpx`, docs: https://docs.projectdiscovery.io/opensource/httpx/running.md)
+  - tech: `-td, -tech-detect` ("display technology in use based on wappalyzer dataset"), `-cff, -custom-fingerprint-file`
+  - output: `-j, -json` ("store output in JSONL(ines) format"), `-o, -output`, `-silent`, `-nc, -no-color`
+  - rate: `-rl, -rate-limit int` (default **150**/s), `-rlm, -rate-limit-minute`, `-t, -threads` (default **50**)
+  - `-timeout int` (seconds, default **10**), `-retries int`, `-fr, -follow-redirects`, `-maxr` (default 10), `-fhr`
+  - `-duc, -disable-update-check` (otherwise it checks for updates), `-random-agent` (default **true**), `-H`, `-p, -ports`, `-sc`, `-title`, `-server`
+  - pdcp cloud: `-pd, -dashboard` uploads results — don't pass it.
+  - `-ss, -screenshot` needs headless Chrome — never pass it.
+- JSON field names (docs: runner/types.go on main): `tech` (`[]string`, **omitempty** — absent when nothing detected), `url`, `input`, `host`, `host_ip`, `port`, `scheme`, `final_url`, `status_code`, `title`, `webserver`, `failed` (bool), `error`, `cdn`, `cdn_name`, `a`, `timestamp`.
+- Version: `v1.12.0` (2026-09-08) (live: proxy.golang.org `@latest`; Docker Hub `projectdiscovery/httpx:v1.12.0`).
+- Licence: **MIT** (live: LICENSE.md, "Copyright (c) 2021 ProjectDiscovery, Inc."). Tech fingerprints come via `wappalyzergo` (MIT) using data from `enthec/webappanalyzer` (**GPL-3.0**) — fine for running the binary; GPL-3 is AGPL-compatible if data were copied.
+- Name clash: the Python `httpx` package also installs an `httpx` CLI. Resolve the binary by absolute path/configured path in `commands.ts`.

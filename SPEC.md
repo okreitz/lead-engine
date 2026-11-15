@@ -60,7 +60,7 @@ First users: &Human, &Human / okreitz consulting, and Olaf's new ventures. Each 
 ```
 
 - **The collector is a separate listener** so that the only public, unauthenticated surface is tiny and write-only. Everything else is behind authentication.
-- **Local mode:** the same processes run on the Mac, bound to `127.0.0.1`. Heavy one-off jobs, like importing the company universe or browser crawling, run on the Mac and sync results to the VPS through the API.
+- **Local mode:** the same processes run on the Mac, bound to `127.0.0.1`. Nothing depends on the Mac: every job, including the company-universe import, runs as an engine job on the VPS (decision 2026-11-15). Browser crawling stays a local-mode opt-in.
 - **Ground Control** shows a Leads card by reading `GET /api/v1/summary` with a read-only token. Ground Control holds no CRM data.
 
 ### Tech stack
@@ -174,13 +174,14 @@ AuditLog        { id, workspaceId?, userId?, action, target, at, details }
 
 ### 5.1 Stream 3: persona fit (built first)
 
-1. **Company universe import** (Mac job, re-run quarterly):
-   - People Data Labs free company dataset (CC BY 4.0), filtered to `country = US` with a website.
-   - SEC EDGAR company list.
-   - SAM.gov entity extract (optional: needs an API key and allows 10 requests/day, so only the monthly public extract).
-   - Overture Places (US, with website) for local businesses.
-   - Each source is normalised by domain and merged into `Company`. Only the ICP-matching subset is synced to the VPS.
-2. **ICP filter:** SQL over `Company` by industry/NAICS, size, state and founded year. The result is a candidate list (default 500 per run).
+1. **Company universe import** (engine job on the VPS, started from Settings → Company data or `POST /api/v1/universe/imports`; re-run quarterly):
+   - People Data Labs free company dataset (CC BY 4.0): it has no fixed download URL, so the owner pastes the link PDL sends after its form, or copies the file into the data volume's `imports/` folder.
+   - SEC EDGAR company list (`company_tickers_exchange.json`): EDGAR has no websites, so it only tags companies the other datasets hold with their CIK and ticker (matched by normalised name). Needs `LE_SEC_USER_AGENT`.
+   - SAM.gov entity extract (optional: needs an API key and allows 10 requests/day, so only the monthly public extract). Not built yet: the `.dat` delimiter is unverified, and D&B-sourced rows must be dropped (`docs/providers.md`).
+   - Overture Places (US, with website) for local businesses (later).
+   - How it runs: stream-download to the data volume (HTTP Range resume), then stream-parse (ZIP, gzip, CSV, pipe-delimited or JSON lines) in slices of about 15 s, so other jobs run in between. While reading it keeps only US companies with a valid website and, by default, rows that may fit the workspace's approved ICP (industry, size, state; unknown values pass). Rows are upserted by domain in batches of 1,000 per transaction with the resume checkpoint, never overwriting existing or hand-edited values. Progress, pause, resume and cancel are in the UI. LinkedIn-derived columns are never read.
+   - Imported companies are flagged `universe`; the ICP filter only searches those, so companies other workspaces entered by hand or from visits never leak. Which dataset filled which field is kept per company, and the account page's source dots show it with the licence.
+2. **ICP filter:** SQL over the universe companies by industry/NAICS, size, state and founded year. The result is a candidate list (default 500 per run).
 3. **Technographics** (optional per ICP): `httpx -td` over the candidates' homepages through `commands.ts`. HTTP Archive (BigQuery) lookups are optional when a GCP project is configured.
 4. **Fit scoring:** fetch the homepage, then the LLM returns fit 0–100, reasons and a short evidence quote. Candidates at or above the threshold (default 60) become `Account`s with a `fit` signal.
 5. **People:**
@@ -365,10 +366,10 @@ Build phase by phase. Finish each phase's acceptance criteria before starting th
 - ✅ Idle RSS of web + engine under 512 MB, measured with `pnpm rss`.
 
 **Phase 2: Stream 3, persona fit (1–2 weeks)**
-- ✅ US company universe imported on the Mac from at least the PDL free dataset and SEC EDGAR; the ICP subset syncs to the VPS.
+- ✅ US company universe imported on the VPS (engine job) from at least the PDL free dataset and SEC EDGAR, filtered to the ICP while streaming, resumable, with progress in the UI.
 - ✅ For one real workspace: 500 candidates → fit-scored accounts with reasons → people from team pages → emails with statuses, all within $20 of spend.
 - ✅ Each contact field shows its source.
-- ✅ **ROI checkpoint:** 200 qualified contacts handed to outreach; replies and meetings logged in the CRM after 3 weeks.
+- ✅ **ROI checkpoint** (measured after go-live; doesn't block finishing the phase): 200 qualified contacts handed to outreach; replies and meetings logged in the CRM after 3 weeks.
 
 **Phase 3: Stream 1, website visits (about 1 week)**
 - ✅ Collector deployed on the VPS behind a Coolify domain; the snippet is installed on at least two of the &Human / okreitz sites.

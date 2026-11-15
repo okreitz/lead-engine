@@ -6,6 +6,9 @@ This product includes or adapts material from the following projects and dataset
 
 == Code ==
 
+yauzl (https://github.com/thejoshwolfe/yauzl)
+  MIT License, Copyright (c) 2014 Josh Wolfe. Used as a dependency to read ZIP datasets.
+
 shadcn/ui (https://github.com/shadcn-ui/ui)
   MIT License, Copyright (c) 2023 shadcn
   Used in: apps/web/src/components/ui/ (button, input, card, dialog; adapted) and the theme tokens in
@@ -23,5 +26,10 @@ IPinfo Lite (https://ipinfo.io), optional
 
 People Data Labs free company dataset (https://www.peopledatalabs.com/company-dataset)
   Company data (c) People Data Labs, licensed under CC BY 4.0
-  (https://creativecommons.org/licenses/by/4.0/); modified (filtered to US companies,
-  LinkedIn-derived fields removed).
+  (https://creativecommons.org/licenses/by/4.0/); modified (filtered to US companies with a
+  website, optionally to a workspace's ICP; LinkedIn-derived fields removed). Imported on the
+  server by the company-universe import; each account page credits it on the fields it filled.
+
+SEC EDGAR company tickers (https://www.sec.gov/files/company_tickers_exchange.json)
+  U.S. Securities and Exchange Commission public data; used to tag companies with their
+  CIK and ticker.

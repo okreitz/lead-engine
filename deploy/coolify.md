@@ -19,6 +19,7 @@ Set these under **Environment Variables**. Mark them as secrets where Coolify of
 | `LE_SETUP_TOKEN` | yes | `openssl rand -hex 24`. Needed once, on the login page, to create the first user. Keep it set (it is harmless once a user exists) or rotate it. |
 | `LE_COOKIE_SECURE` | no | `auto` (default): the session cookie is `Secure` when the request came over HTTPS. Use `true` when the app is only reached over HTTPS. |
 | `ANTHROPIC_API_KEY` | no | Instance fallback for the `anthropic-api` LLM adapter. Workspaces can store their own key instead (Settings → Provider keys). |
+| `LE_SEC_USER_AGENT` | no | SEC EDGAR requires a declared contact User-Agent, e.g. `Lead Engine admin@yourdomain.com`. Without it, the EDGAR import and EDGAR officers are off. |
 | `LE_LOG_LEVEL` | no | `info` (default). |
 
 There is no separate session secret. Sessions are random 256-bit tokens; only their SHA-256 is stored in SQLite, and every unsafe request also needs a per-session CSRF token.
@@ -34,7 +35,7 @@ Under the resource's **Domains**, set the domain per service. The port after the
 Ground Control reads `GET https://leads.<your-domain>/api/v1/summary` with a read-only token (Settings → API tokens), through the web container's proxy.
 
 ## 4. Storage
-The compose file declares the named volume `le-data`, mounted at `/data` in the engine. It holds `/data/le.db` (SQLite with WAL files) and later the IP databases. Coolify shows it under **Persistent Storage**, read-only there because it comes from the compose file. Include it in Coolify's backups, or copy `le.db` with `sqlite3 /data/le.db ".backup ..."`. Nightly `VACUUM INTO` backups arrive in a later phase.
+The compose file declares the named volume `le-data`, mounted at `/data` in the engine. It holds `/data/le.db` (SQLite with WAL files), `/data/imports/` (dataset downloads for Settings → Company data; deleted after a successful import, and you can copy a PDL file here with `docker cp` instead of pasting a link) and later the IP databases. Coolify shows it under **Persistent Storage**, read-only there because it comes from the compose file. Include it in Coolify's backups, or copy `le.db` with `sqlite3 /data/le.db ".backup ..."`. Nightly `VACUUM INTO` backups arrive in a later phase.
 
 ## 5. Health checks
 Both services define compose health checks. The engine checks `GET /api/v1/health` on 4501 and the web checks `GET /login` on 4500. The web starts only after the engine is healthy. Coolify's own Healthcheck page isn't used for Git-based Compose applications.

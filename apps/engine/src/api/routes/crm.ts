@@ -47,6 +47,7 @@ import {
   nextSteps,
   suppressions,
 } from '../../db/schema.ts';
+import { nameKey, sizeBounds } from '../../universe/keys.ts';
 import type { AppContext } from '../context.ts';
 import { HttpError, parse, workspaceOf } from '../http.ts';
 
@@ -151,8 +152,19 @@ export function registerCrmRoutes(app: FastifyInstance, ctx: AppContext): void {
           .where(eq(accounts.id, id))
           .run();
         if (Object.keys(companyFields).length) {
+          // A person's edit overrides dataset values; its source dot then says "manual".
+          const origins = { ...company.origins };
+          for (const k of Object.keys(companyFields)) origins[k] = 'manual';
           tx.update(companies)
-            .set({ ...companyFields, updatedAt: now })
+            .set({
+              ...companyFields,
+              ...(companyFields.sizeRange !== undefined
+                ? sizeBounds(companyFields.sizeRange ?? null)
+                : {}),
+              ...(companyFields.name ? { nameKey: nameKey(companyFields.name) } : {}),
+              origins,
+              updatedAt: now,
+            })
             .where(eq(companies.id, company.id))
             .run();
         }
