@@ -24,6 +24,9 @@ function noNulBytes(args: readonly string[]): void {
   }
 }
 
+const HTTPX_SWITCHES = new Set(['-silent', '-json', '-td', '-duc', '-nc', '-fr', '-version']);
+const HTTPX_NUMERIC = new Set(['-timeout', '-rl', '-t', '-maxr', '-retries']);
+
 export const COMMANDS = {
   // Headless print mode only. The exact flags are in docs/claude-cli.md; the adapter
   // (Phase 1) builds them and passes the prompt on stdin.
@@ -35,12 +38,27 @@ export const COMMANDS = {
       if (args[0] !== '-p') throw new CommandArgumentError('claude must run in print mode (-p)');
     },
   },
-  // Technology detection (`httpx -td`), Phase 2.
+  // Technology detection (`httpx -td`), Phase 2. Targets go on stdin; only the flags below are
+  // allowed (never -pd, which uploads results, or -ss, which needs Chrome). The Python `httpx`
+  // package installs a CLI with the same name, so LE_HTTPX_BIN can give an absolute path.
   httpx: {
-    bin: 'httpx',
+    bin: process.env.LE_HTTPX_BIN || 'httpx',
     timeoutMs: 600_000,
     validate(args) {
       noNulBytes(args);
+      for (let i = 0; i < args.length; i++) {
+        const a = args[i]!;
+        if (HTTPX_SWITCHES.has(a)) continue;
+        if (HTTPX_NUMERIC.has(a) && /^\d{1,5}$/.test(args[i + 1] ?? '')) {
+          i++;
+          continue;
+        }
+        if (a === '-H' && /^User-Agent: [\x20-\x7e]{1,200}$/.test(args[i + 1] ?? '')) {
+          i++;
+          continue;
+        }
+        throw new CommandArgumentError(`httpx argument not allowed: ${a}`);
+      }
     },
   },
 } as const satisfies Record<string, CommandSpec>;

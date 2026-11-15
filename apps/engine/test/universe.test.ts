@@ -13,6 +13,7 @@ import { closeCursor, LIMITS } from '../src/universe/import.ts';
 import { domainFromWebsite, icpDropReason, nameKey, stateCode } from '../src/universe/normalize.ts';
 import { csvRows, jsonArrayRows, readRecords } from '../src/universe/records.ts';
 import { makeCtx, setupClient } from './helpers.ts';
+import { approveOffer } from './offer-fixtures.ts';
 
 async function* chunked(text: string, size = 7): AsyncGenerator<string> {
   for (let i = 0; i < text.length; i += size) yield text.slice(i, i + size);
@@ -197,39 +198,7 @@ async function setup(env: { sec?: boolean } = {}) {
 }
 
 async function approveIcp(c: Awaited<ReturnType<typeof setupClient>>, icp: object) {
-  const { draft } = await import('./offer-fixtures.ts');
-  const { offers, offerVersions } = await import('../src/db/schema.ts');
-  const now = c.ctx.now();
-  const ws = c.ctx.db
-    .select()
-    .from((await import('../src/db/schema.ts')).workspaces)
-    .get()!;
-  c.ctx.db
-    .insert(offers)
-    .values({
-      id: 'off_1',
-      workspaceId: ws.id,
-      name: 'X',
-      websiteUrl: 'https://x.com',
-      createdAt: now,
-      updatedAt: now,
-    })
-    .run();
-  c.ctx.db
-    .insert(offerVersions)
-    .values({
-      id: 'ofv_1',
-      offerId: 'off_1',
-      workspaceId: ws.id,
-      version: 1,
-      status: 'approved',
-      source: 'human',
-      data: draft({ icp: { ...draft().icp, ...icp } }),
-      createdAt: now,
-      updatedAt: now,
-      approvedAt: now,
-    })
-    .run();
+  approveOffer(c.ctx, icp);
 }
 
 describe('universe import job', () => {

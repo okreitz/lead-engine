@@ -24,6 +24,8 @@ const COMMANDS: { label: string; href: string; keys?: string }[] = [
   { label: 'Go to Offer profile', href: '/offer', keys: 'G O' },
   { label: 'Go to ROI', href: '/roi', keys: 'G R' },
   { label: 'Go to Settings', href: '/settings', keys: 'G S' },
+  { label: 'Find matching companies', href: '/find' },
+  { label: 'Company data (universe import)', href: '/settings?tab=data' },
   { label: 'Contacts', href: '/contacts' },
   { label: 'Import or export CSV', href: '/data' },
   { label: 'Suppression list', href: '/settings?tab=suppression' },

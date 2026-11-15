@@ -482,6 +482,95 @@ export const universeImports = sqliteTable(
   (t) => [index('universe_imports_workspace_idx').on(t.workspaceId, t.createdAt)],
 );
 
+// ---------------------------------------------------------------- stream 3: persona fit runs
+
+/** SQL filter over universe companies (SPEC §5.1 step 2), prefilled from the approved ICP. */
+export interface CandidateFilters {
+  industries: string[];
+  naics: string[];
+  sizeMin: number | null;
+  sizeMax: number | null;
+  states: string[];
+  foundedFrom: number | null;
+  foundedTo: number | null;
+  exclude: string[];
+}
+
+export interface PersonaRunCounts {
+  candidates: number;
+  scored: number;
+  accounts: number;
+  skipped: number;
+  errors: number;
+  techChecked: number;
+}
+
+/**
+ * One "Find matching companies" run: candidates from the ICP filter, homepage fetch, optional
+ * technographics, LLM fit score; candidates at or above the threshold become accounts.
+ */
+export const personaRuns = sqliteTable(
+  'persona_runs',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    offerVersionId: text('offer_version_id')
+      .notNull()
+      .references(() => offerVersions.id, { onDelete: 'cascade' }),
+    filters: json<CandidateFilters>('filters').notNull(),
+    limit: integer('limit').notNull(),
+    threshold: integer('threshold').notNull(),
+    options: json<{ tech: boolean; people: boolean }>('options').notNull(),
+    state: text('state', { enum: ['queued', 'running', 'done', 'failed', 'cancelled'] }).notNull(),
+    counts: json<PersonaRunCounts>('counts').notNull(),
+    estimateUsd: real('estimate_usd').notNull(),
+    /** Why technographics were skipped (e.g. httpx not installed). */
+    techNote: text('tech_note'),
+    error: text('error'),
+    jobId: text('job_id'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+    finishedAt: ts('finished_at'),
+  },
+  (t) => [index('persona_runs_workspace_idx').on(t.workspaceId, t.createdAt)],
+);
+
+export const personaCandidates = sqliteTable(
+  'persona_candidates',
+  {
+    id: text('id').primaryKey(),
+    runId: text('run_id')
+      .notNull()
+      .references(() => personaRuns.id, { onDelete: 'cascade' }),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    companyId: text('company_id')
+      .notNull()
+      .references(() => companies.id, { onDelete: 'cascade' }),
+    position: integer('position').notNull(),
+    /** Rule-based fit when selected (ranks the candidate list). */
+    ruleFit: integer('rule_fit').notNull(),
+    state: text('state', { enum: ['pending', 'scored', 'skipped', 'error'] }).notNull(),
+    /** LLM homepage fit, its reasons and a quote checked against the page. */
+    llmFit: integer('llm_fit'),
+    fit: integer('fit'),
+    reasons: json<string[]>('reasons'),
+    evidence: text('evidence'),
+    evidenceUrl: text('evidence_url'),
+    note: text('note'),
+    accountId: text('account_id').references(() => accounts.id, { onDelete: 'set null' }),
+    scoredAt: ts('scored_at'),
+  },
+  (t) => [
+    uniqueIndex('persona_candidates_run_company_uq').on(t.runId, t.companyId),
+    index('persona_candidates_run_idx').on(t.runId, t.state, t.position),
+  ],
+);
+
 // ---------------------------------------------------------------- control
 
 /** `workspaceId` null = global. Values are lower-cased. */

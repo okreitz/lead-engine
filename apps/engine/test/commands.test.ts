@@ -12,6 +12,21 @@ describe('command registry', () => {
   });
 
   it('rejects NUL bytes in arguments', async () => {
-    await expect(runCommand('httpx', ['-u', 'a\0b'])).rejects.toBeInstanceOf(CommandArgumentError);
+    await expect(runCommand('httpx', ['-H', 'User-Agent: a\0b'])).rejects.toBeInstanceOf(
+      CommandArgumentError,
+    );
+  });
+
+  it('allows only known httpx flags (no uploads, screenshots or target files)', async () => {
+    for (const bad of [
+      ['-pd'],
+      ['-ss'],
+      ['-l', 'targets.txt'],
+      ['-o', 'x'],
+      ['-rl', 'many'],
+      ['-u', 'x'],
+    ]) {
+      await expect(runCommand('httpx', bad)).rejects.toBeInstanceOf(CommandArgumentError);
+    }
   });
 });
