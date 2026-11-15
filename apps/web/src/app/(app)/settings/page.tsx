@@ -2,7 +2,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useState, type FormEvent } from 'react';
+import { Suspense, useEffect, useState, type FormEvent } from 'react';
+import { KeyHelp } from '@/components/blocks/key-help';
 import { ConfirmButton } from '@/components/confirm';
 import { BudgetSettings } from '@/components/settings/budget-settings';
 import { CompanyData } from '@/components/settings/company-data';
@@ -10,6 +11,7 @@ import { SuppressionList } from '@/components/settings/suppression-list';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
 import { Input, Label, NativeSelect } from '@/components/ui/input';
+import { helpFor, PROVIDER_HELP, PROVIDER_HELP_CHECKED } from '@le/shared';
 import { api, errorMessage, fmtDate } from '@/lib/api';
 import { useMe } from '@/lib/me';
 
@@ -176,81 +178,170 @@ function ProviderKeys({ disabled }: { disabled: boolean }) {
     queryFn: () => api<ProviderKeyList>('/provider-keys'),
   });
   const [error, setError] = useState<string | null>(null);
+  // Scroll to #key-<provider> when a "missing key" link points here.
+  useEffect(() => {
+    if (!keys.data) return;
+    const id = window.location.hash.slice(1);
+    if (id) document.getElementById(id)?.scrollIntoView({ block: 'center' });
+  }, [keys.data]);
+  const save = async (provider: string, key: string, form: HTMLFormElement) => {
+    try {
+      setError(null);
+      await api(`/provider-keys/${provider}`, { method: 'PUT', body: { key } });
+      form.reset();
+      await qc.invalidateQueries({ queryKey: ['provider-keys'] });
+    } catch (err) {
+      setError(errorMessage(err));
+    }
+  };
+  const listed = new Set(keys.data?.providers.map((p) => p.provider) ?? []);
+  const later = PROVIDER_HELP.filter(
+    (h) => h.kind === 'workspace-key' && h.status === 'later' && !listed.has(h.id),
+  );
+  const instance = PROVIDER_HELP.filter((h) => h.kind === 'instance-env');
   return (
-    <Card>
-      <CardTitle>Provider keys</CardTitle>
-      <p className="text-muted-foreground mb-3 text-sm">
-        Bring your own keys. They are encrypted with LE_MASTER_KEY and never shown again.
-      </p>
-      {keys.data && !keys.data.masterKeyConfigured ? (
-        <p className="mb-3 text-sm text-amber-700">
-          LE_MASTER_KEY is not set on the engine, so keys can&apos;t be saved.
+    <div className="flex flex-col gap-4">
+      <Card>
+        <CardTitle>Provider keys</CardTitle>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Bring your own keys. They are encrypted with LE_MASTER_KEY and never shown again. Each row
+          says what the key is for, what it costs and where to create it (links checked{' '}
+          {PROVIDER_HELP_CHECKED}).
         </p>
-      ) : null}
-      <ul className="flex flex-col gap-3">
-        {keys.data?.providers.map((p) => (
-          <li key={p.provider} className="flex items-center gap-3">
-            <span className="w-24 font-mono text-sm">{p.provider}</span>
-            {p.configured ? (
-              <span className="flex flex-col">
-                <Badge tone="ok">•••• set {fmtDate(p.createdAt)}</Badge>
-                <span className="text-muted-foreground text-xs">
-                  last used {p.lastUsedAt ? fmtDate(p.lastUsedAt) : 'never'}
-                </span>
-              </span>
-            ) : (
-              <Badge tone="muted">not set</Badge>
-            )}
-            {!disabled ? (
-              <form
-                className="ml-auto flex gap-2"
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  const form = e.currentTarget;
-                  const key = String(new FormData(form).get('key'));
-                  try {
-                    setError(null);
-                    await api(`/provider-keys/${p.provider}`, { method: 'PUT', body: { key } });
-                    form.reset();
-                    await qc.invalidateQueries({ queryKey: ['provider-keys'] });
-                  } catch (err) {
-                    setError(errorMessage(err));
-                  }
-                }}
-              >
-                <Input
-                  name="key"
-                  type="password"
-                  placeholder="New key"
-                  className="w-56"
-                  required
-                  autoComplete="off"
-                />
-                <Button size="sm" type="submit">
-                  Save
-                </Button>
-                {p.configured ? (
-                  <ConfirmButton
-                    trigger={
-                      <Button size="sm" variant="outline" type="button">
-                        Remove
+        {keys.data && !keys.data.masterKeyConfigured ? (
+          <p className="mb-3 text-sm text-amber-700">
+            LE_MASTER_KEY is not set on the engine, so keys can&apos;t be saved.
+          </p>
+        ) : null}
+        <ul className="flex flex-col divide-y">
+          {keys.data?.providers.map((p) => {
+            const help = helpFor(p.provider);
+            return (
+              <li key={p.provider} id={`key-${p.provider}`} className="flex flex-col gap-2 py-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="w-40 text-sm font-medium">{help?.label ?? p.provider}</span>
+                  {p.configured ? (
+                    <span className="flex flex-col">
+                      <Badge tone="ok">•••• set {fmtDate(p.createdAt)}</Badge>
+                      <span className="text-muted-foreground text-xs">
+                        last used {p.lastUsedAt ? fmtDate(p.lastUsedAt) : 'never'}
+                      </span>
+                    </span>
+                  ) : (
+                    <Badge tone="muted">not set</Badge>
+                  )}
+                  {!disabled ? (
+                    <form
+                      className="ml-auto flex flex-wrap gap-2"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        const form = e.currentTarget;
+                        const f = new FormData(form);
+                        const key =
+                          p.provider === 'aws-ses'
+                            ? JSON.stringify({
+                                accessKeyId: String(f.get('accessKeyId')).trim(),
+                                secretAccessKey: String(f.get('secretAccessKey')).trim(),
+                                region: String(f.get('region')).trim(),
+                              })
+                            : String(f.get('key'));
+                        void save(p.provider, key, form);
+                      }}
+                    >
+                      {p.provider === 'aws-ses' ? (
+                        <>
+                          <Input
+                            name="accessKeyId"
+                            placeholder="Access key ID"
+                            className="w-44"
+                            required
+                            autoComplete="off"
+                          />
+                          <Input
+                            name="secretAccessKey"
+                            type="password"
+                            placeholder="Secret access key"
+                            className="w-44"
+                            required
+                            autoComplete="off"
+                          />
+                          <Input
+                            name="region"
+                            placeholder="Region, e.g. us-east-1"
+                            className="w-40"
+                            required
+                            autoComplete="off"
+                          />
+                        </>
+                      ) : (
+                        <Input
+                          name="key"
+                          type="password"
+                          placeholder="New key"
+                          className="w-56"
+                          required
+                          autoComplete="off"
+                        />
+                      )}
+                      <Button size="sm" type="submit">
+                        Save
                       </Button>
-                    }
-                    title={`Remove the ${p.provider} key?`}
-                    confirmLabel="Remove"
-                    onConfirm={async () => {
-                      await api(`/provider-keys/${p.provider}`, { method: 'DELETE' });
-                      await qc.invalidateQueries({ queryKey: ['provider-keys'] });
-                    }}
-                  />
-                ) : null}
-              </form>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {error ? <p className="text-destructive mt-2 text-sm">{error}</p> : null}
-    </Card>
+                      {p.configured ? (
+                        <ConfirmButton
+                          trigger={
+                            <Button size="sm" variant="outline" type="button">
+                              Remove
+                            </Button>
+                          }
+                          title={`Remove the ${help?.label ?? p.provider} key?`}
+                          confirmLabel="Remove"
+                          onConfirm={async () => {
+                            await api(`/provider-keys/${p.provider}`, { method: 'DELETE' });
+                            await qc.invalidateQueries({ queryKey: ['provider-keys'] });
+                          }}
+                        />
+                      ) : null}
+                    </form>
+                  ) : null}
+                </div>
+                {help ? <KeyHelp help={help} /> : null}
+              </li>
+            );
+          })}
+        </ul>
+        {error ? <p className="text-destructive mt-2 text-sm">{error}</p> : null}
+      </Card>
+      <Card>
+        <CardTitle>Instance settings (environment variables)</CardTitle>
+        <p className="text-muted-foreground mb-2 text-sm">
+          Set by the server operator in Coolify, not here. Listed so you know where each one comes
+          from.
+        </p>
+        <ul className="flex flex-col divide-y">
+          {instance.map((h) => (
+            <li key={h.id} id={`key-${h.id}`} className="flex flex-col gap-1 py-2">
+              <span className="text-sm">
+                {h.label} <code className="text-xs">{h.env}</code>
+              </span>
+              <KeyHelp help={h} />
+            </li>
+          ))}
+        </ul>
+      </Card>
+      {later.length ? (
+        <Card>
+          <CardTitle>Later phases</CardTitle>
+          <ul className="flex flex-col divide-y">
+            {later.map((h) => (
+              <li key={h.id} id={`key-${h.id}`} className="flex flex-col gap-1 py-2">
+                <span className="text-sm">{h.label} (not used yet)</span>
+                <KeyHelp help={h} />
+              </li>
+            ))}
+          </ul>
+        </Card>
+      ) : null}
+    </div>
   );
 }
 

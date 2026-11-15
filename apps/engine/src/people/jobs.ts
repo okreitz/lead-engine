@@ -25,6 +25,7 @@ import { budgetStatus } from '../providers/budget.ts';
 import { ICYPEAS_CREDIT_USD, SEARCH_CREDITS, VERIFY_CREDITS } from '../providers/icypeas.ts';
 import { ProviderAuthError, ProviderCallError } from '../providers/errors.ts';
 import { ReacherThrottled } from '../providers/reacher.ts';
+import { SES_VALIDATION_USD } from '../providers/ses.ts';
 import { findSuppression } from '../suppression.ts';
 import { discoverPages } from './discover.ts';
 import { edgarOfficers } from './edgar.ts';
@@ -81,9 +82,19 @@ export function peopleEstimateUsd(ctx: AppContext, workspaceId: string, offer: O
 /** Upper bound per contact: three verifications plus one found email. */
 export function emailPerContactUsd(ctx: AppContext, workspaceId: string) {
   const p = emailProviders(ctx, workspaceId);
-  const verify = p.verifierName === 'icypeas' ? 3 * VERIFY_CREDITS * ICYPEAS_CREDIT_USD : 0;
+  const perCheck = {
+    reacher: 0,
+    'aws-ses': SES_VALIDATION_USD,
+    icypeas: VERIFY_CREDITS * ICYPEAS_CREDIT_USD,
+  };
+  // Up to 3 candidates, each possibly through every verifier in the chain.
+  const verify = 3 * p.verifierNames.reduce((s, n) => s + perCheck[n], 0);
   const find = p.finder ? SEARCH_CREDITS * ICYPEAS_CREDIT_USD : 0;
-  return { usd: verify + find, verifier: p.verifierName, finder: p.finder ? 'icypeas' : null };
+  return {
+    usd: verify + find,
+    verifier: p.verifierNames.length ? p.verifierNames.join(' → ') : null,
+    finder: p.finder ? 'icypeas' : null,
+  };
 }
 
 /** Contacts the email step would work on: no address yet, or one not yet verified. */

@@ -1,6 +1,8 @@
 'use client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { helpFor } from '@le/shared';
+import { KeyHelp } from '@/components/blocks/key-help';
 import { ConfirmButton } from '@/components/confirm';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
@@ -258,6 +260,10 @@ function StartImport({ u, running }: { u: Universe; running: boolean }) {
         {def?.unavailable ? (
           <p className="text-muted-foreground text-sm">To enable: {def.unavailable}.</p>
         ) : null}
+        {source === 'sec-edgar' && helpFor('sec-user-agent') ? (
+          <KeyHelp help={helpFor('sec-user-agent')!} />
+        ) : null}
+        {source === 'pdl' && helpFor('pdl') ? <KeyHelp help={helpFor('pdl')!} /> : null}
         {def?.fixedUrl ? (
           <p className="text-muted-foreground text-sm">
             Downloads {def.fixedUrl} and tags matching companies with their SEC CIK and ticker

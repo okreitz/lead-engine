@@ -1,4 +1,5 @@
 'use client';
+import { WaitReason } from '@/components/blocks/key-help';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
@@ -105,7 +106,9 @@ export function BudgetCard() {
             {b.waitingJobs.map((j) => (
               <li key={j.id}>
                 <span className="font-mono">{j.type}</span>:{' '}
-                <span className="text-amber-800">{j.waitReason}</span>
+                <span className="text-amber-800">
+                  {j.waitReason ? <WaitReason text={j.waitReason} /> : null}
+                </span>
                 <span className="text-muted-foreground"> · retries {fmtDate(j.runAt)}</span>
               </li>
             ))}

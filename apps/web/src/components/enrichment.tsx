@@ -1,6 +1,7 @@
 'use client';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { MissingKey, WaitReason } from '@/components/blocks/key-help';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog';
 import { api, errorMessage } from '@/lib/api';
@@ -13,7 +14,7 @@ interface Enrichment {
     usd: number;
     perContactUsd: number;
     provider: string;
-    verifier: 'reacher' | 'icypeas' | null;
+    verifier: string | null;
     finder: 'icypeas' | null;
     confirm: boolean;
   };
@@ -90,8 +91,8 @@ export function Enrichment({ accountId }: { accountId: string }) {
       </div>
       {noEmailProvider ? (
         <p className="text-muted-foreground">
-          No email verifier: add an Icypeas key in Settings → Provider keys (Reacher stays off until
-          the port 25 test passes).
+          <MissingKey id="icypeas" what="Email verification" /> Reacher stays off until the port 25
+          test passes.
         </p>
       ) : (
         <p className="text-muted-foreground">
@@ -108,8 +109,18 @@ export function Enrichment({ accountId }: { accountId: string }) {
             className={j.state === 'failed' ? 'text-destructive' : 'text-muted-foreground'}
           >
             {label}: {j.state}
-            {j.state === 'waiting' && j.waitReason ? ` (${j.waitReason})` : ''}
-            {j.state === 'failed' && j.lastError ? ` (${j.lastError})` : ''}
+            {j.state === 'waiting' && j.waitReason ? (
+              <>
+                {' ('}
+                <WaitReason text={j.waitReason} />)
+              </>
+            ) : null}
+            {j.state === 'failed' && j.lastError ? (
+              <>
+                {' ('}
+                <WaitReason text={j.lastError} />)
+              </>
+            ) : null}
             {j.state === 'done' && j.result ? ` · ${summary(j.result)}` : ''}
           </p>
         );

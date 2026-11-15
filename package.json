@@ -17,7 +17,8 @@
     "test": "vitest run",
     "db:generate": "pnpm --filter @le/engine db:generate",
     "db:migrate": "pnpm --filter @le/engine db:migrate",
-    "rss": "node scripts/rss.mjs"
+    "rss": "node scripts/rss.mjs",
+    "docs:keys": "pnpm --filter @le/engine exec tsx ../../scripts/provider-help-table.mts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

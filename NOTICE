@@ -6,6 +6,9 @@ This product includes or adapts material from the following projects and dataset
 
 == Code ==
 
+aws4fetch (https://github.com/mhart/aws4fetch)
+  MIT License, Copyright (c) Michael Hart. Used as a dependency to sign Amazon SES requests.
+
 yauzl (https://github.com/thejoshwolfe/yauzl)
   MIT License, Copyright (c) 2014 Josh Wolfe. Used as a dependency to read ZIP datasets.
 
