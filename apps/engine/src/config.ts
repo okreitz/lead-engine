@@ -30,6 +30,12 @@ const envSchema = z.object({
    * "Lead Engine admin@yourdomain.com" (docs/providers.md). EDGAR features are off without it.
    */
   LE_SEC_USER_AGENT: z.string().min(5).optional(),
+  /** Reacher sidecar: off until outbound port 25 is confirmed (docs/providers.md). */
+  LE_REACHER: z.enum(['on', 'off']).default('off'),
+  LE_REACHER_URL: z.string().url().default('http://reacher:8080'),
+  LE_REACHER_SECRET: z.string().optional(),
+  /** Minimum gap between Reacher checks to one recipient domain. */
+  LE_REACHER_DOMAIN_INTERVAL_MS: z.coerce.number().int().min(0).default(60_000),
 });
 
 export interface Config {
@@ -46,6 +52,7 @@ export interface Config {
   anthropicApiKey: string | null;
   importsDir: string;
   secUserAgent: string | null;
+  reacher: { enabled: boolean; url: string; secret: string | null; domainIntervalMs: number };
 }
 
 /** True for loopback binds, where first-user setup needs no token. */
@@ -82,5 +89,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       parsed.LE_IMPORTS_DIR ?? path.join(path.dirname(path.resolve(parsed.LE_DB_PATH)), 'imports'),
     ),
     secUserAgent: parsed.LE_SEC_USER_AGENT ?? null,
+    reacher: {
+      enabled: parsed.LE_REACHER === 'on',
+      url: parsed.LE_REACHER_URL,
+      secret: parsed.LE_REACHER_SECRET ?? null,
+      domainIntervalMs: parsed.LE_REACHER_DOMAIN_INTERVAL_MS,
+    },
   };
 }

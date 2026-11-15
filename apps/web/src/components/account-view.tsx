@@ -10,6 +10,7 @@ import { MiniBar, ScoreBreakdown } from '@/components/blocks/score';
 import { SourceDot } from '@/components/blocks/source-dot';
 import { ConfirmButton } from '@/components/confirm';
 import { CopyEmail } from '@/components/copy-email';
+import { Enrichment } from '@/components/enrichment';
 import { Button } from '@/components/ui/button';
 import { Input, NativeSelect, Textarea } from '@/components/ui/input';
 import { HoverCard } from '@/components/ui/tooltip';
@@ -378,6 +379,7 @@ export function AccountView({
             <h2 id="con-h" className="text-sm font-semibold">
               Contacts ({contacts.length})
             </h2>
+            <Enrichment accountId={id} />
             <ul className="flex flex-col gap-2">
               {contacts.map((c) => {
                 const src = (field: string) =>
@@ -389,11 +391,18 @@ export function AccountView({
                       <SourceDot sources={toSources(src('fullName'))} />
                       {c.title ? <span className="text-muted-foreground"> · {c.title}</span> : null}
                       <SourceDot sources={toSources(src('title'))} />
+                      {c.personaMatch ? (
+                        <span className="bg-secondary ml-1.5 rounded px-1.5 py-0.5 text-[11px]">
+                          {c.personaMatch}
+                          <SourceDot sources={toSources(src('personaMatch'))} />
+                        </span>
+                      ) : null}
                     </div>
                     {c.email ? (
                       <div className="flex flex-wrap items-center gap-1.5">
                         <CopyEmail email={c.email} />
                         <EmailStatusBadge status={c.emailStatus} />
+                        <SourceDot sources={toSources(src('emailStatus'))} />
                         <SourceDot sources={toSources(src('email'))} />
                         <ConfirmButton
                           trigger={

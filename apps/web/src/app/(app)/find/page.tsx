@@ -37,6 +37,7 @@ interface Estimate {
   model: string;
   remainingUsd: number;
   confirm: boolean;
+  peoplePerAccountUsd: number;
 }
 interface Counts {
   candidates: number;
@@ -126,8 +127,9 @@ function NewRun({ onStarted }: { onStarted: (id: string) => void }) {
   const [limit, setLimit] = useState(500);
   const [overrides, setOverrides] = useState<Partial<Filters>>({});
   const [tech, setTech] = useState(true);
+  const [people, setPeople] = useState(false);
   const [open, setOpen] = useState(false);
-  const body = { limit, filters: overrides, tech };
+  const body = { limit, filters: overrides, tech, people };
   const est = useQuery({
     queryKey: ['persona-estimate', body],
     queryFn: () => api<Estimate>('/persona/estimate', { method: 'POST', body }),
@@ -230,6 +232,13 @@ function NewRun({ onStarted }: { onStarted: (id: string) => void }) {
           <label className="flex items-center gap-2 self-end text-sm">
             <input type="checkbox" checked={tech} onChange={(e) => setTech(e.target.checked)} />
             Detect technologies (httpx, free, when installed)
+          </label>
+          <label className="flex items-center gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" checked={people} onChange={(e) => setPeople(e.target.checked)} />
+            Then find people and emails for each new account
+            {est.data
+              ? ` (up to ${money(est.data.peoplePerAccountUsd)} per account, charged as each runs)`
+              : ''}
           </label>
           <div className="sm:col-span-2">
             <Button type="submit" variant="outline" size="sm">
