@@ -146,3 +146,6 @@ The draft model now returns a one-sentence `rationale` per field, stored apart f
 
 ## 2026-11-10: ROI forecast is linear; ledger rows say what was charged
 The month-end forecast is spend ÷ elapsed share of the UTC month, with at least one day counted as elapsed. Stream bars compare spend with the sub-cap shares (shown even when not enforced). LLM spend also counts in its stream, as the budget check does. `GET /ledger` labels each row `paid`, `free_quota` or `not_charged` (usd 0 without a free quota, e.g. a miss), and links it to its record, resolved only within the workspace.
+
+## 2026-11-15: Deploys run from GitHub Actions over Tailscale
+Coolify only listens on the tailnet and can't receive GitHub webhooks, and cloud build sessions can't reach it. After CI passes on `main`, `deploy.yml` joins the tailnet as an ephemeral `tag:ci` node (Tailscale OAuth client), calls Coolify's deploy API and waits for the result. Without its five secrets it skips, so it never turns CI red. Coolify's dashboard stays off the public internet.
