@@ -27,6 +27,8 @@ services:
       LE_COOKIE_SECURE: ${LE_COOKIE_SECURE:-auto}
       # Optional instance fallback for the anthropic-api adapter; workspace keys win.
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # SEC EDGAR needs a declared contact User-Agent, e.g. "Lead Engine admin@yourdomain.com".
+      LE_SEC_USER_AGENT: ${LE_SEC_USER_AGENT:-}
     volumes:
       - le-data:/data
     expose:
@@ -75,5 +77,6 @@ services:
       retries: 3
 
 volumes:
-  # SQLite database (WAL) and later the .mmdb files. Back this volume up.
+  # SQLite database (WAL), dataset downloads (imports/) and later the .mmdb files.
+  # Back up le.db; imports/ can be re-downloaded.
   le-data:

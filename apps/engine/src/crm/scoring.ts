@@ -35,7 +35,7 @@ const norm = (s: string) =>
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 
-function overlaps(haystack: string, needles: string[]): string | null {
+export function overlaps(haystack: string, needles: string[]): string | null {
   const h = ` ${norm(haystack)} `;
   for (const n of needles) {
     const k = norm(n);

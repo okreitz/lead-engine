@@ -2,6 +2,7 @@ import type { Config } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import type { Crawler } from '../crawler/crawler.ts';
 import type { LlmAdapter } from '../llm/types.ts';
+import type { DownloadFetch } from '../universe/files.ts';
 
 /** Everything route handlers and jobs need. Tests build one with fakes. */
 export interface AppContext {
@@ -12,4 +13,6 @@ export interface AppContext {
   llm?: LlmAdapter;
   /** Crawler override (tests use a fake fetch). */
   crawler?: Crawler;
+  /** Dataset download override (tests serve fixture files). */
+  download?: DownloadFetch;
 }

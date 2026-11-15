@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState, type FormEvent } from 'react';
 import { ConfirmButton } from '@/components/confirm';
 import { BudgetSettings } from '@/components/settings/budget-settings';
+import { CompanyData } from '@/components/settings/company-data';
 import { SuppressionList } from '@/components/settings/suppression-list';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
@@ -16,6 +17,7 @@ const TABS = [
   { key: 'general', label: 'General' },
   { key: 'keys', label: 'Provider keys' },
   { key: 'budget', label: 'Budget' },
+  { key: 'data', label: 'Company data' },
   { key: 'suppression', label: 'Suppression' },
   { key: 'members', label: 'Members' },
   { key: 'tokens', label: 'API tokens', ownerOnly: true },
@@ -77,6 +79,7 @@ function SettingsTabs() {
       ) : null}
       {tab === 'keys' ? <ProviderKeys disabled={!owner} /> : null}
       {tab === 'budget' ? <BudgetSettings disabled={!owner} /> : null}
+      {tab === 'data' ? <CompanyData disabled={!owner} /> : null}
       {tab === 'suppression' ? <SuppressionList /> : null}
       {tab === 'members' ? <Members disabled={!owner} /> : null}
       {tab === 'tokens' && owner ? <Tokens /> : null}

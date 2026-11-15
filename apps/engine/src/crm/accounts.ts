@@ -13,6 +13,8 @@ import {
 } from '../db/schema.ts';
 import { newId } from '../ids.ts';
 import { normalizeDomain } from '../suppression.ts';
+import { nameKey, sizeBounds } from '../universe/keys.ts';
+import { SOURCES } from '../universe/sources.ts';
 import { stagesOf } from '../workspaces.ts';
 import { domainNotSuppressed, emailNotSuppressed } from './filters.ts';
 
@@ -71,7 +73,7 @@ export function upsertCompany(tx: Tx, input: CompanyInput, source: string, now: 
     ...(input.city ? { city: input.city } : {}),
     ...(input.industry ? { industry: input.industry } : {}),
     ...(input.naics ? { naics: input.naics } : {}),
-    ...(input.sizeRange ? { sizeRange: input.sizeRange } : {}),
+    ...(input.sizeRange ? { sizeRange: input.sizeRange, ...sizeBounds(input.sizeRange) } : {}),
     ...(input.foundedYear ? { foundedYear: input.foundedYear } : {}),
   };
   if (existing) {
@@ -84,7 +86,16 @@ export function upsertCompany(tx: Tx, input: CompanyInput, source: string, now: 
   }
   const id = newId('co');
   tx.insert(companies)
-    .values({ id, domain, country, sources: [source], tech: [], updatedAt: now, ...fields })
+    .values({
+      id,
+      domain,
+      country,
+      sources: [source],
+      tech: [],
+      nameKey: nameKey(fields.name),
+      updatedAt: now,
+      ...fields,
+    })
     .run();
   return id;
 }
@@ -308,8 +319,26 @@ export function accountDetail(tx: Tx, workspaceId: string, accountId: string) {
       .orderBy(desc(signals.occurredAt))
       .limit(200)
       .all(),
-    fieldSources: sources,
+    fieldSources: [...sources, ...datasetSources(company)],
   };
+}
+
+/** Dataset provenance from `company.origins` as field sources, with licence attribution. */
+function datasetSources(company: typeof companies.$inferSelect) {
+  return Object.entries(company.origins).map(([field, origin]) => {
+    const def = SOURCES[origin];
+    return {
+      id: `origin_${field}`,
+      workspaceId: '',
+      entity: 'company' as const,
+      entityId: company.id,
+      field: field === 'cik' ? 'ticker' : field,
+      source: def ? `${def.label} (${def.licence})` : origin,
+      url: def?.homepage ?? null,
+      fetchedAt: company.updatedAt,
+      confidence: 1,
+    };
+  });
 }
 
 /** Moves an account to a stage and writes the change as an Activity (SPEC §6). */

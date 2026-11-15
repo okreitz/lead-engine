@@ -21,6 +21,18 @@ export interface JobContext {
 
 export type JobHandler = (job: JobContext) => Promise<unknown>;
 
+/**
+ * Returned by a handler that did one slice of a long task (e.g. the universe import) and
+ * wants to run again: the job goes back to `queued` without using up an attempt, so other
+ * jobs get a turn in between and a crash resumes from the last checkpoint.
+ */
+export class ContinueJob {
+  constructor(
+    public readonly delayMs = 0,
+    public readonly progress: unknown = null,
+  ) {}
+}
+
 /** Thrown by a handler for errors that retrying can't fix. */
 export class PermanentJobError extends Error {
   override name = 'PermanentJobError';
@@ -131,6 +143,16 @@ export class JobRunner {
     set({ state: 'running', attempts, waitReason: null });
     try {
       const result = await handler({ ctx: this.ctx, job: { ...job, attempts } });
+      if (result instanceof ContinueJob) {
+        set({
+          state: 'queued',
+          attempts: 0,
+          runAt: this.ctx.now() + result.delayMs,
+          result: result.progress,
+          lastError: null,
+        });
+        return;
+      }
       set({ state: 'done', result: result ?? null, lastError: null });
     } catch (err) {
       const now = this.ctx.now();

@@ -169,22 +169,43 @@ export const offerVersions = sqliteTable(
 
 // ---------------------------------------------------------------- company universe and CRM
 
-export const companies = sqliteTable('companies', {
-  id: text('id').primaryKey(),
-  domain: text('domain').notNull().unique(),
-  name: text('name').notNull(),
-  country: text('country').notNull(),
-  state: text('state'),
-  city: text('city'),
-  industry: text('industry'),
-  naics: text('naics'),
-  sizeRange: text('size_range'),
-  foundedYear: integer('founded_year'),
-  sources: json<string[]>('sources').notNull().default([]),
-  tech: json<string[]>('tech').notNull().default([]),
-  techCheckedAt: ts('tech_checked_at'),
-  updatedAt: ts('updated_at').notNull(),
-});
+export const companies = sqliteTable(
+  'companies',
+  {
+    id: text('id').primaryKey(),
+    domain: text('domain').notNull().unique(),
+    name: text('name').notNull(),
+    country: text('country').notNull(),
+    state: text('state'),
+    city: text('city'),
+    industry: text('industry'),
+    naics: text('naics'),
+    sizeRange: text('size_range'),
+    foundedYear: integer('founded_year'),
+    sources: json<string[]>('sources').notNull().default([]),
+    tech: json<string[]>('tech').notNull().default([]),
+    techCheckedAt: ts('tech_checked_at'),
+    /** True once a public dataset (PDL, SEC EDGAR, SAM.gov) listed the company: the ICP filter only
+     * searches these, so companies other workspaces added by hand or from visits never leak. */
+    universe: integer('universe', { mode: 'boolean' }).notNull().default(false),
+    /** Parsed `sizeRange` bounds for SQL filtering (max null = open-ended). */
+    sizeMin: integer('size_min'),
+    sizeMax: integer('size_max'),
+    /** Normalised legal name (lower case, no punctuation or suffixes) for dataset matching. */
+    nameKey: text('name_key'),
+    /** SEC EDGAR central index key and ticker, for public companies. */
+    cik: text('cik'),
+    ticker: text('ticker'),
+    /** Which dataset filled each firmographic field, e.g. { industry: 'pdl' } (source dots). */
+    origins: json<Record<string, string>>('origins').notNull().default({}),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [
+    index('companies_universe_state_idx').on(t.universe, t.state),
+    index('companies_name_key_idx').on(t.nameKey),
+    index('companies_cik_idx').on(t.cik),
+  ],
+);
 
 export interface ScoreReasons {
   fit: string[];
@@ -397,6 +418,68 @@ export const savedViews = sqliteTable(
     createdAt: ts('created_at').notNull(),
   },
   (t) => [index('saved_views_workspace_idx').on(t.workspaceId, t.entity)],
+);
+
+// ---------------------------------------------------------------- company universe import
+
+export const UNIVERSE_SOURCES = ['pdl', 'sec-edgar', 'sam'] as const;
+export type UniverseSource = (typeof UNIVERSE_SOURCES)[number];
+export const IMPORT_STATES = [
+  'queued',
+  'downloading',
+  'processing',
+  'paused',
+  'done',
+  'failed',
+  'cancelled',
+] as const;
+
+/** Snapshot of the ICP prefilter an import ran with (null = all US companies with a website). */
+export interface ImportFilter {
+  industries: string[];
+  employeeRange: string | null;
+  states: string[];
+  exclude: string[];
+}
+
+/**
+ * One run of the company-universe import (SPEC §5.1 step 1), on the VPS as a resumable engine
+ * job: stream-download to the data volume (HTTP Range resume), then stream-parse in slices,
+ * keeping US companies with a website, and upsert them in batches.
+ */
+export const universeImports = sqliteTable(
+  'universe_imports',
+  {
+    id: text('id').primaryKey(),
+    /** The workspace that started it (jobs belong to a workspace; companies are shared). */
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    source: text('source', { enum: UNIVERSE_SOURCES }).notNull(),
+    /** Download URL; null when the file was placed in the data volume's imports folder. */
+    url: text('url'),
+    /** File name inside `<data dir>/imports/`. */
+    fileName: text('file_name').notNull(),
+    state: text('state', { enum: IMPORT_STATES }).notNull(),
+    filter: json<ImportFilter>('filter'),
+    bytesTotal: integer('bytes_total'),
+    bytesDone: integer('bytes_done').notNull().default(0),
+    /** Rows parsed so far; also the resume checkpoint (rows before it are already written). */
+    rowsRead: integer('rows_read').notNull().default(0),
+    /** Rows that passed the US, website and ICP filters. */
+    rowsKept: integer('rows_kept').notNull().default(0),
+    rowsInserted: integer('rows_inserted').notNull().default(0),
+    rowsUpdated: integer('rows_updated').notNull().default(0),
+    /** Why rows were dropped: { not_us, no_website, icp, invalid }. */
+    dropped: json<Record<string, number>>('dropped').notNull().default({}),
+    error: text('error'),
+    jobId: text('job_id'),
+    createdBy: text('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+    finishedAt: ts('finished_at'),
+  },
+  (t) => [index('universe_imports_workspace_idx').on(t.workspaceId, t.createdAt)],
 );
 
 // ---------------------------------------------------------------- control

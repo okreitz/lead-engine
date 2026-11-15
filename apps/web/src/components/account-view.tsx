@@ -292,6 +292,9 @@ export function AccountView({
         <Fact k="Size" v={company.sizeRange} sources={companySources('sizeRange')} />
         <Fact k="Founded" v={company.foundedYear} sources={companySources('foundedYear')} />
         <Fact k="Tech" v={company.tech.join(', ')} sources={companySources('tech')} />
+        {company.ticker ? (
+          <Fact k="Ticker" v={company.ticker} sources={companySources('ticker')} />
+        ) : null}
       </dl>
       <p className="text-muted-foreground text-xs">
         First source {account.firstSource}, {fmtDate(account.firstSourceAt)} · scored{' '}

@@ -149,3 +149,12 @@ The month-end forecast is spend ÷ elapsed share of the UTC month, with at least
 
 ## 2026-11-15: Deploys run from GitHub Actions over Tailscale
 Coolify only listens on the tailnet and can't receive GitHub webhooks, and cloud build sessions can't reach it. After CI passes on `main`, `deploy.yml` joins the tailnet as an ephemeral `tag:ci` node (Tailscale OAuth client), calls Coolify's deploy API and waits for the result. Without its five secrets it skips, so it never turns CI red. Coolify's dashboard stays off the public internet.
+
+## 2026-11-15: No Mac in the loop; the company universe is imported on the VPS
+Olaf's decision: everything is built in cloud sessions and runs on the VPS. The universe import (SPEC §5.1 step 1) is the `universe.import` engine job, started from Settings → Company data or the API. It downloads to the data volume with HTTP Range resume and stream-parses in ~15 s slices (`ContinueJob` puts the job back in the queue without using an attempt), filtering to US + website + ICP while reading and writing 1,000 rows per transaction together with the resume checkpoint. PDL has no fixed URL, so the owner pastes PDL's emailed link or copies the file into `/data/imports`. Measured: 1M rows in 5 min, peak RSS +80 MB over the idle process.
+
+## 2026-11-15: ROI checkpoints are measured after go-live
+They need real outreach and weeks of replies, so they don't block finishing a phase. Each phase's ROI checkpoint is read from the ROI view after go-live.
+
+## 2026-11-15: Universe companies are flagged and carry per-field origins
+`companies.universe` marks rows a public dataset listed; the ICP filter and any market counts read only those, so companies another workspace typed in or matched from visits stay private. Imports fill only empty fields and record the dataset per field in `companies.origins` (a person's edit sets `manual`); the account page turns these into source dots with the dataset's licence, which is how the CC BY 4.0 attribution reaches the UI. EDGAR only tags existing companies by unique normalised name, since it has no websites.
