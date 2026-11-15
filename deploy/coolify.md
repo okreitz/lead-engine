@@ -2,7 +2,7 @@
 
 The stack is two containers built from `deploy/Dockerfile`: **engine** (API :4501, collector :4511, SQLite on a volume) and **web** (Next.js :4500, which proxies `/api/v1` to the engine). Coolify's proxy terminates HTTPS; no ports are published on the host.
 
-Coolify can't receive GitHub webhooks on this server, so pushes don't deploy. Deploy manually in the dashboard, or through the Coolify API (see Ground Control's `docs/coolify-api.md`).
+Coolify can't receive GitHub webhooks on this server. Pushes to `main` deploy through the GitHub workflow in section 8, or you can redeploy manually in the dashboard.
 
 ## 1. Create the resource
 1. **Projects → your project → + New → Public/Private Repository (GitHub App)** → `okreitz/lead-engine`, branch `main`.
@@ -46,6 +46,27 @@ Both services define compose health checks. The engine checks `GET /api/v1/healt
 
 ## 7. Memory
 Each container is capped at 256 MB (`mem_limit`). `pnpm rss` measured about 190 MB idle for both together (limit 512 MB, CLAUDE.md).
+
+## 8. Automatic deploys
+Coolify can't receive GitHub webhooks here, so `.github/workflows/deploy.yml` deploys instead. After CI passes on a push to `main`, a GitHub runner joins the tailnet as a short-lived node tagged `tag:ci`, calls Coolify's `POST /api/v1/deploy`, waits until the deployment finishes, and leaves the tailnet. You can also start it by hand (Actions → Deploy → Run workflow). Until all five secrets below are set, the workflow skips with a notice, so it never fails CI.
+
+One-time setup:
+1. **Coolify API token:** Settings → Advanced → turn the API on. Then Keys & Tokens → API tokens → create a token with **deploy** permission (`read` too, so the workflow can follow the deployment).
+2. **Tailscale tag and access rule** (admin console → Access controls):
+   - Add `"tag:ci": ["autogroup:admin"]` under `tagOwners`.
+   - Allow `tag:ci` to reach the VPS on port 8000 only.
+3. **Tailscale OAuth client** (admin console → Settings → OAuth clients → Generate): scope **Auth keys: write**, tag `tag:ci`.
+4. **GitHub secrets** (`okreitz/lead-engine` → Settings → Secrets and variables → Actions):
+
+| Secret | Value |
+|---|---|
+| `TS_OAUTH_CLIENT_ID` | OAuth client ID from step 3 |
+| `TS_OAUTH_SECRET` | OAuth client secret from step 3 |
+| `COOLIFY_URL` | Coolify over Tailscale, e.g. `http://<vps-tailscale-name>:8000` |
+| `COOLIFY_TOKEN` | API token from step 1 |
+| `COOLIFY_APP_UUID` | The application's UUID (the ID in its Coolify URL) |
+
+If Coolify restricts API access by IP (Settings → Advanced → allowed IPs), add the tailnet range `100.64.0.0/10`.
 
 ## Local run of the same images
 ```sh

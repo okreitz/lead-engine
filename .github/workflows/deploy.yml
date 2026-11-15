@@ -1,0 +1,93 @@
+name: Deploy
+
+# Redeploys the Coolify app after CI passes on main. Coolify only listens on Tailscale,
+# so the runner joins the tailnet as a short-lived tagged node, calls Coolify's deploy API
+# and leaves. Setup and secrets: deploy/coolify.md, "Automatic deploys".
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: redeploy on Coolify
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TS_OAUTH_CLIENT_ID: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+      TS_OAUTH_SECRET: ${{ secrets.TS_OAUTH_SECRET }}
+      COOLIFY_URL: ${{ secrets.COOLIFY_URL }}
+      COOLIFY_TOKEN: ${{ secrets.COOLIFY_TOKEN }}
+      COOLIFY_APP_UUID: ${{ secrets.COOLIFY_APP_UUID }}
+    steps:
+      - name: Check that deploy secrets are set
+        id: secrets
+        run: |
+          missing=""
+          for name in TS_OAUTH_CLIENT_ID TS_OAUTH_SECRET COOLIFY_URL COOLIFY_TOKEN COOLIFY_APP_UUID; do
+            if [ -z "${!name}" ]; then missing="$missing $name"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::notice::Automatic deploy skipped; missing secrets:$missing (see deploy/coolify.md)"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Join the tailnet
+        if: steps.secrets.outputs.ready == 'true'
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+
+      - name: Trigger the Coolify deploy
+        if: steps.secrets.outputs.ready == 'true'
+        id: trigger
+        run: |
+          set -euo pipefail
+          base="${COOLIFY_URL%/}/api/v1"
+          body=$(curl -sS --fail-with-body --max-time 30 -X POST \
+            -H "Authorization: Bearer $COOLIFY_TOKEN" \
+            "$base/deploy?uuid=$COOLIFY_APP_UUID&force=false")
+          deployment=$(printf '%s' "$body" | jq -r '.deployments[0].deployment_uuid // empty')
+          if [ -z "$deployment" ]; then
+            echo "::error::Coolify did not return a deployment id"
+            printf '%s\n' "$body"
+            exit 1
+          fi
+          echo "Started deployment $deployment"
+          echo "deployment=$deployment" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for the deployment to finish
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          DEPLOYMENT: ${{ steps.trigger.outputs.deployment }}
+        run: |
+          set -euo pipefail
+          base="${COOLIFY_URL%/}/api/v1"
+          for _ in $(seq 1 90); do
+            status=$(curl -sS --fail --max-time 30 -H "Authorization: Bearer $COOLIFY_TOKEN" \
+              "$base/deployments/$DEPLOYMENT" | jq -r '.status // "unknown"')
+            echo "status: $status"
+            case "$status" in
+              finished) exit 0 ;;
+              failed|cancelled*|error) echo "::error::Coolify deployment $DEPLOYMENT ended as $status"; exit 1 ;;
+            esac
+            sleep 10
+          done
+          echo "::error::Coolify deployment $DEPLOYMENT did not finish within 15 minutes"
+          exit 1
