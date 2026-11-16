@@ -79,9 +79,19 @@ jobs:
         run: |
           set -euo pipefail
           base="${COOLIFY_URL%/}/api/v1"
+          missing=0
           for _ in $(seq 1 90); do
-            status=$(curl -sS --fail --max-time 30 -H "Authorization: Bearer $COOLIFY_TOKEN" \
-              "$base/deployments/$DEPLOYMENT" | jq -r '.status // "unknown"')
+            # Coolify can answer 404 for a few seconds until a queued deployment is registered,
+            # so a 404 only fails the job when it lasts about a minute.
+            code=$(curl -sS --max-time 30 -o /tmp/deployment.json -w '%{http_code}' \
+              -H "Authorization: Bearer $COOLIFY_TOKEN" "$base/deployments/$DEPLOYMENT") || code=000
+            if [ "$code" = 404 ] && [ "$missing" -lt 6 ]; then
+              missing=$((missing + 1)); echo "status: not registered yet ($missing/6)"; sleep 10; continue
+            fi
+            if [ "$code" != 200 ]; then
+              echo "::error::Coolify answered HTTP $code for deployment $DEPLOYMENT"; exit 1
+            fi
+            status=$(jq -r '.status // "unknown"' /tmp/deployment.json)
             echo "status: $status"
             case "$status" in
               finished) exit 0 ;;
