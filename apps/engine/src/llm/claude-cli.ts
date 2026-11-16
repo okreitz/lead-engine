@@ -60,6 +60,13 @@ const cliResultSchema = z.looseObject({
  */
 export function parseClaudeCliResult(run: RunResult, requestedModel: string): LlmResult {
   if (run.timedOut) throw new ProviderCallError('claude CLI timed out', null);
+  if (run.exitCode === -1 && run.stdout.trim() === '') {
+    throw new ProviderCallError(
+      'the claude CLI could not be started on this server (it is only for local mode). ' +
+        'Choose "Anthropic API" under Settings → General → LLM adapter.',
+      null,
+    );
+  }
   let json: unknown;
   try {
     json = JSON.parse(run.stdout);

@@ -19,12 +19,15 @@ export class LlmOutputError extends Error {
   override name = 'LlmOutputError';
 }
 
-/** Adapter for a workspace: the test override, else its setting, else API when a key exists. */
+/**
+ * Adapter for a workspace: the test override, else its saved setting, else the Anthropic API.
+ * The `claude` CLI is opt-in local mode only: it is not installed in the Docker image, and the
+ * settings page already shows the API as the default, so an unsaved setting must mean the API.
+ */
 export function llmAdapterFor(ctx: AppContext, workspaceId: string): LlmAdapter {
   if (ctx.llm) return ctx.llm;
   const ws = ctx.db.select().from(workspaces).where(eq(workspaces.id, workspaceId)).get();
-  const choice =
-    ws?.settings.llmAdapter ?? (ctx.config.anthropicApiKey ? 'anthropic-api' : 'claude-cli');
+  const choice = ws?.settings.llmAdapter ?? 'anthropic-api';
   return choice === 'claude-cli' ? claudeCliAdapter() : anthropicApiAdapter();
 }
 
