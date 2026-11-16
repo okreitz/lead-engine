@@ -36,4 +36,31 @@ describe('loadConfig', () => {
     expect(config.enginePort).toBe(4501);
     expect(config.masterKey).toBeNull();
   });
+
+  it('treats empty collector variables as unset', () => {
+    const config = loadConfig({
+      LE_SEC_USER_AGENT: '',
+      LE_COLLECTOR_URL: '',
+      LE_IPINFO_TOKEN: '',
+      LE_LOG_LEVEL: '',
+    });
+    expect(config.secUserAgent).toBeNull();
+    expect(config.logLevel).toBe('info');
+    expect(config.collector).toMatchObject({
+      publicUrl: 'http://127.0.0.1:4511',
+      ipinfoToken: null,
+      clientIpHeader: 'x-real-ip',
+      geoDownload: true,
+    });
+  });
+
+  it('reads the collector settings', () => {
+    const config = loadConfig({
+      LE_HOST: '0.0.0.0',
+      LE_COLLECTOR_URL: 'https://collect.example.com/',
+      LE_DB_PATH: '/data/le.db',
+    });
+    expect(config.collector.publicUrl).toBe('https://collect.example.com');
+    expect(config.collector.geoDir).toBe('/data/geo');
+  });
 });

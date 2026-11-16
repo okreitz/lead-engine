@@ -4,8 +4,9 @@
 # No ports are published here; Coolify's proxy routes the domains you assign
 # (see deploy/coolify.md):
 #   - app domain       -> web:4500    (login required on every page and API route)
-#   - collector domain -> engine:4511 (Phase 3; the only public, unauthenticated surface)
-# The engine API (:4501) is reached only by the web container over the internal network.
+#   - collector domain -> engine:4511 (the only public, unauthenticated surface)
+# The engine API (:4501) is reached only by the web container over the internal network;
+# never give the engine a domain on port 4501.
 #
 # `${VAR:?}` marks a variable Coolify requires before it deploys. Never commit values.
 name: lead-engine
@@ -37,6 +38,15 @@ services:
       LE_REACHER_SECRET: ${LE_REACHER_SECRET:-}
       # Optional: ProjectDiscovery httpx for technographics (not shipped in the image).
       LE_HTTPX_BIN: ${LE_HTTPX_BIN:-}
+      # Stream 1 collector: the public URL used in the snippet, e.g. https://collect.example.com
+      # (the domain you give the engine service on port 4511).
+      LE_COLLECTOR_URL: ${LE_COLLECTOR_URL:-}
+      # Coolify's Traefik sets X-Real-Ip to the visitor's address (it drops any value a client
+      # sends). Change only behind a different proxy.
+      LE_CLIENT_IP_HEADER: ${LE_CLIENT_IP_HEADER:-x-real-ip}
+      # Optional: IPinfo Lite (CC BY-SA) instead of DB-IP Lite. Downloaded at runtime into
+      # /data/geo, never part of the image.
+      LE_IPINFO_TOKEN: ${LE_IPINFO_TOKEN:-}
     volumes:
       - le-data:/data
     expose:
@@ -85,6 +95,6 @@ services:
       retries: 3
 
 volumes:
-  # SQLite database (WAL), dataset downloads (imports/) and later the .mmdb files.
-  # Back up le.db; imports/ can be re-downloaded.
+  # SQLite database (WAL), dataset downloads (imports/) and the country/ASN .mmdb files (geo/).
+  # Back up le.db; imports/ and geo/ are re-downloaded.
   le-data:
