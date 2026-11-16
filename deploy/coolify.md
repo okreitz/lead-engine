@@ -25,6 +25,8 @@ Set these under **Environment Variables**. Mark them as secrets where Coolify of
 | `LE_HTTPX_BIN` | no | Absolute path to ProjectDiscovery's `httpx` if you add it to the engine image; technographics are skipped without it. |
 | `LE_COLLECTOR_URL` | yes, for website visitors | The collector's public URL, used in every snippet: `https://collect.okreitz.com`. Without it the snippet points at `127.0.0.1` and won't work on your sites. |
 | `LE_IPINFO_TOKEN` | no | Use IPinfo Lite (CC BY-SA 4.0) instead of DB-IP Lite (CC BY 4.0, the default, no account) as the country/ASN database. Either is downloaded at runtime into `/data/geo` and refreshed monthly; neither is in the image. |
+| `LE_BLUESKY` | no | Stream 2's Bluesky Jetstream connection. Empty or `on`: it opens only while a workspace has an approved offer with Bluesky on (one outbound WebSocket to `jetstream.us-east.bsky.network`). `off`: never connect. |
+| (workspace) Stack Exchange, GitHub, Serper keys | for those inbox sources | Not env vars: each workspace enters them in Settings → Provider keys. All free (Serper: its 2,500 free queries only; paid queries are capped at $0). Hacker News and Bluesky need no key. |
 | `LE_CLIENT_IP_HEADER` | no | `x-real-ip` (default). Coolify's Traefik sets it to the visitor's address and drops any value a visitor sends; only change it behind a different proxy. |
 | (workspace) ipapi.is key | for website visitors | Not an env var: each workspace enters its own free ipapi.is key in Settings → Provider keys (their terms require one account per customer). Without it, business visits stay "unclassified". |
 | `LE_LOG_LEVEL` | no | `info` (default). |

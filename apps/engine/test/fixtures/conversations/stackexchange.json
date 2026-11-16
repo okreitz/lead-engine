@@ -1,0 +1,39 @@
+{
+  "items": [
+    {
+      "tags": ["crm", "small-business"],
+      "owner": {
+        "account_id": 1,
+        "reputation": 1,
+        "user_id": 2,
+        "user_type": "registered",
+        "display_name": "Sample Asker",
+        "link": "https://softwarerecs.stackexchange.com/users/2/sample-asker"
+      },
+      "is_answered": false,
+      "view_count": 12,
+      "answer_count": 0,
+      "score": 0,
+      "last_activity_date": 1794594031,
+      "creation_date": 1794584034,
+      "question_id": 80016521,
+      "content_license": "CC BY-SA 4.0",
+      "link": "https://softwarerecs.stackexchange.com/questions/80016521/simple-crm-alternative-for-a-small-agency",
+      "title": "Simple CRM alternative for a small agency?",
+      "body": "<p>We outgrew spreadsheets. Looking for a <strong>CRM alternative</strong> to Salesforce that a 10-person team can run.</p>\n<p>Call me on +1 (415) 555-0134 if you know one.</p>"
+    },
+    {
+      "tags": ["dynamics-crm"],
+      "owner": { "display_name": "Other Person" },
+      "creation_date": 1794584000,
+      "question_id": 80016522,
+      "content_license": "CC BY-SA 4.0",
+      "link": "https://softwarerecs.stackexchange.com/questions/80016522/delete-managed-columns",
+      "title": "How to delete unused columns in managed Dynamics CRM solutions",
+      "body": "<p>Unrelated admin question.</p>"
+    }
+  ],
+  "has_more": false,
+  "quota_max": 10000,
+  "quota_remaining": 9987
+}

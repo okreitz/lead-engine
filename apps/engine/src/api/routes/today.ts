@@ -5,6 +5,7 @@
 import { and, asc, desc, eq, gte, inArray, isNull, like, lte, or, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import { inboxCounts, listInbox } from '../../conversations/inbox.ts';
 import { listAccounts } from '../../crm/accounts.ts';
 import { domainNotSuppressed } from '../../crm/filters.ts';
 import { listContacts } from '../../crm/records.ts';
@@ -129,8 +130,17 @@ export function today(tx: Tx, workspaceId: string, now: number) {
     },
     offer: approved ?? null,
     accountCount,
-    /** Conversations arrive in Phase 4. */
-    inbox: null,
+    inbox: {
+      counts: inboxCounts(tx, workspaceId, now),
+      top: listInbox(tx, workspaceId, { tab: 'priority', limit: 3 }, now).map((t) => ({
+        id: t.id,
+        source: t.source,
+        title: t.title,
+        intent: t.intent,
+        label: t.label,
+        postedAt: t.postedAt,
+      })),
+    },
   };
 }
 

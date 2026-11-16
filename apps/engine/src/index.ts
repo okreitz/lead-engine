@@ -3,6 +3,9 @@ import type { AppContext } from './api/context.ts';
 import { GeoService } from './collector/geo.ts';
 import { VisitPipeline } from './collector/pipeline.ts';
 import { buildCollector } from './collector/server.ts';
+import { scheduleConversations } from './conversations/poll.ts';
+import { BlueskyStream, officialJetstream } from './conversations/sources/bluesky.ts';
+import { purgeExpiredThreads } from './conversations/store.ts';
 import { purgeIpLookupCache } from './providers/ipapi.ts';
 import { purgeIpCompanies } from './visits/record.ts';
 import { systemPtr } from './visits/ptr.ts';
@@ -35,6 +38,23 @@ geo.start();
 const runner = new JobRunner(ctx, jobHandlers(ctx));
 if (config.jobs) runner.start();
 
+// Stream 2: polls are queued when due; the Bluesky stream opens only while a workspace needs it.
+const bluesky = new BlueskyStream(ctx, officialJetstream(config.bluesky.jetstreamUrl), {
+  enabled: config.bluesky.enabled,
+});
+ctx.bluesky = bluesky;
+const conversationTick = () => {
+  try {
+    if (config.jobs) scheduleConversations(ctx);
+    bluesky.refresh();
+  } catch (err) {
+    api.log.error({ err: { message: (err as Error).message } }, 'conversation scheduler failed');
+  }
+};
+const conversationTimer = setInterval(conversationTick, 60_000);
+conversationTimer.unref();
+setTimeout(conversationTick, 5_000).unref();
+
 // Intent decays over time: rescore every workspace hourly (local, no paid calls).
 const rescoreTimer = setInterval(() => {
   for (const ws of db.select({ id: workspaces.id }).from(workspaces).all()) {
@@ -47,6 +67,7 @@ rescoreTimer.unref();
 const purgeTimer = setInterval(() => {
   purgeIpLookupCache(ctx);
   purgeIpCompanies(ctx);
+  purgeExpiredThreads(db, Date.now());
 }, 3600_000);
 purgeTimer.unref();
 
@@ -60,6 +81,7 @@ async function shutdown(signal: string): Promise<void> {
   api.log.info({ signal }, 'shutting down');
   runner.stop();
   geo.stop();
+  await bluesky.stop();
   await Promise.allSettled([api.close(), collector.app.close()]);
   await collector.queue.drain();
   db.$client.close();

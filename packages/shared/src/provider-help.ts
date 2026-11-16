@@ -5,7 +5,7 @@
  * Links are checked against the vendor's own pages; the date is `PROVIDER_HELP_CHECKED`.
  */
 
-export const PROVIDER_HELP_CHECKED = '2026-11-15';
+export const PROVIDER_HELP_CHECKED = '2026-11-16';
 
 export interface ProviderHelp {
   /** Key id in Settings (`provider_keys.provider`) or the instance setting's id. */
@@ -32,7 +32,7 @@ export const PROVIDER_HELP: ProviderHelp[] = [
     label: 'Anthropic API',
     kind: 'workspace-key',
     status: 'active',
-    usedFor: 'LLM for offer drafts, fit scoring and people extraction',
+    usedFor: 'LLM for offer drafts, fit scoring, people extraction and inbox thread scoring',
     cost: 'pay as you go; claude-haiku-5-5 is $0.10 / $0.50 per million input / output tokens',
     createUrl: 'https://platform.claude.com/settings/keys',
     createUrlIsDocs: false,
@@ -78,34 +78,37 @@ export const PROVIDER_HELP: ProviderHelp[] = [
     id: 'serper',
     label: 'Serper',
     kind: 'workspace-key',
-    status: 'later',
-    usedFor: 'Reddit threads via Google search (stream 2, Phase 4)',
-    cost: '2,500 free queries, no card; paid packs start at $50 (capped at $0 here)',
+    status: 'active',
+    usedFor:
+      'Inbox (stream 2): Reddit threads found through Google search (site:reddit.com), daily; only URL, title and snippet are kept',
+    cost: '2,500 free queries once, no card; paid packs start at $50, so paid queries are capped at $0 here',
     createUrl: 'https://serper.dev/api-keys',
     createUrlIsDocs: false,
-    scope: 'no scopes',
+    scope: 'no scopes; one Serper account per workspace (their terms allow one account per person)',
   },
   {
     id: 'stackexchange',
     label: 'Stack Exchange',
     kind: 'workspace-key',
-    status: 'later',
-    usedFor: 'Stack Exchange question search (stream 2, Phase 4)',
-    cost: 'free; 10,000 requests/day with a key',
-    createUrl: 'https://stackapps.com/apps/oauth/register',
+    status: 'active',
+    usedFor: 'Inbox (stream 2): Stack Exchange question search (/search/advanced), hourly',
+    cost: 'free; 10,000 requests/day per IP with a key',
+    createUrl: 'https://stackapps.com/applications',
     createUrlIsDocs: false,
-    scope: 'register an app, then "Generate API Key"; read-only, no OAuth needed',
+    scope:
+      'register an application, then "Generate API Key" (no OAuth, no client secret needed); set an expiry date',
   },
   {
     id: 'github',
     label: 'GitHub',
     kind: 'workspace-key',
-    status: 'later',
-    usedFor: 'Issue search (stream 2, Phase 4)',
-    cost: 'free; 30 searches/minute with a token',
+    status: 'active',
+    usedFor: 'Inbox (stream 2): issue search (REST) and discussion search (GraphQL), daily',
+    cost: 'free; 30 searches/minute and 5,000 GraphQL points/hour per token',
     createUrl: 'https://github.com/settings/personal-access-tokens/new',
     createUrlIsDocs: false,
-    scope: 'fine-grained token, "Public repositories" access, no permissions',
+    scope:
+      'fine-grained token, Repository access "Public repositories", no permissions (it can only read public data)',
   },
   {
     id: 'ipinfo',

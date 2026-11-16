@@ -1,0 +1,25 @@
+{
+  "data": {
+    "search": {
+      "nodes": [
+        {
+          "url": "https://github.com/sample-org/app/discussions/12",
+          "title": "Looking for a CRM alternative that syncs with our app",
+          "bodyText": "Which CRM alternative do people use with this? We run a 30-person sales team.",
+          "createdAt": "2026-11-15T12:00:00Z",
+          "isAnswered": false,
+          "author": { "login": "sample-user", "__typename": "User" },
+          "repository": { "nameWithOwner": "sample-org/app" }
+        },
+        {
+          "url": "https://github.com/sample-org/app/discussions/13",
+          "title": "Release notes",
+          "bodyText": "CRM alternative release",
+          "createdAt": "2026-11-15T12:00:00Z",
+          "author": { "login": "release-bot", "__typename": "Bot" },
+          "repository": { "nameWithOwner": "sample-org/app" }
+        }
+      ]
+    }
+  }
+}

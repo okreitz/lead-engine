@@ -219,3 +219,21 @@ A business IP located in the US is taken as a US company (`createAccount` with c
 
 ## 2026-11-15: `pnpm rss` with stream 1
 The warm-up now loads the real DB-IP Lite databases (downloaded into the throwaway data folder, or `--geo-dir`), adds a site and sends 300 collector page views before idling. Linux container, Node 22: engine 121.2 MB + web 96.0 MB = **217.2 MB** with the databases already on disk, and engine 156.5 MB + web 96.1 MB = **252.6 MB** right after the engine downloaded and gunzipped them itself (the download leaves a higher RSS watermark until the next restart). The two .mmdb files are read into one Buffer each (~18 MB) and decoded lazily with a 2,000-record cache.
+
+## 2026-11-16: Stream 2 runs as scheduled jobs plus one Bluesky connection
+A one-minute scheduler queues `conversations.poll` per source and workspace when due (HN 15 min, Stack Exchange hourly, GitHub and Reddit daily) and `conversations.score` while threads wait. Polls run in ~20 s slices (`ContinueJob`) so they never block other jobs; a source error, a missing key or a used-up free quota is shown on the source and retried later, never failing the queue. Sources run only for workspaces with an approved offer. Bluesky is one Jetstream connection for the whole engine, opened only while a workspace needs it, matched locally against every workspace's phrases; deletion events remove stored posts. `LE_BLUESKY=off` turns it off.
+
+## 2026-11-16: Free APIs with keys go through the provider layer; HN and Bluesky don't
+Stack Exchange, GitHub and Serper calls are provider-layer adapters: counted against a free quota (SE 10,000/day, GitHub 5,000/day, Serper 2,500 lifetime) with a $0 paid cap, so they appear in the ledger at $0 and a used-up grant stops the source instead of spending. HN and Bluesky need no key and have no quota to meter, so they call out directly. All three keys are BYO per workspace and the sources wait without them.
+
+## 2026-11-16: Stack Exchange key as `key=`
+The 2025 Stack Apps help says to send an API key as the `key` query parameter; the older docs page says `Authorization: Bearer`. Live, the API reads both (an unknown key is reported as an unknown application, an unknown Bearer value as an invalid access token). We follow the newer page; the `LE_E2E=1` test checks it with a real key.
+
+## 2026-11-16: The prefilter is word-window matching with per-phrase negatives
+A phrase matches when its words (stop words dropped, plurals folded) all appear within max(6, 3 × words) tokens, or verbatim; any negative keyword vetoes that phrase. Search APIs (GitHub especially) match loosely, so every hit is re-checked locally, and the Bluesky firehose is cut to a handful of posts a day. Bluesky stores at most 300 matches per workspace per day, and the scorer at most 300 threads per workspace per day (`settings.conversations.dailyScoringCap`).
+
+## 2026-11-16: Threads store redacted excerpts; companies only from the poster's own words
+Excerpts (1,200 chars) have emails and phone numbers removed before storage or scoring. Reddit keeps only URL, title and Serper's snippet and no author; Bluesky keeps the DID, never a resolved handle. The LLM's `companyMentioned` is kept only if the name appears in the post, and "Create account" needs it to resolve to an existing US `Company` (by domain, else one unique name match) that isn't suppressed. The account gets `firstSource = conversations` and a `thread` signal (weight 3 for intent 2, 5 for intent 3).
+
+## 2026-11-16: Thread retention and feedback
+Unactioned threads (state `new` or `dismissed` without feedback) are deleted 90 days after posting, hourly. `X` dismisses with `not_relevant` feedback, `R` marks replied with `good` (unless set otherwise), and both are kept: the three newest of each verdict go into the scoring prompt as few-shot examples, inside an untrusted-data block. Self-promotion posts stay out of the Priority tab but appear in All.

@@ -49,6 +49,10 @@ const envSchema = z.object({
   LE_GEO_DOWNLOAD: z.enum(['on', 'off']).default('on'),
   /** Optional IPinfo Lite token: use IPinfo Lite (CC BY-SA) instead of DB-IP Lite. */
   LE_IPINFO_TOKEN: z.string().min(6).optional(),
+  /** Stream 2: the Bluesky Jetstream connection (opens only for workspaces with an approved offer). */
+  LE_BLUESKY: z.enum(['on', 'off']).default('on'),
+  /** Jetstream v2 instance (us-east or us-west). */
+  LE_JETSTREAM_URL: z.string().url().default('https://jetstream.us-east.bsky.network'),
 });
 
 export interface Config {
@@ -73,6 +77,7 @@ export interface Config {
     geoDownload: boolean;
     ipinfoToken: string | null;
   };
+  bluesky: { enabled: boolean; jetstreamUrl: string };
 }
 
 /** True for loopback binds, where first-user setup needs no token. */
@@ -129,6 +134,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       ),
       geoDownload: parsed.LE_GEO_DOWNLOAD === 'on',
       ipinfoToken: parsed.LE_IPINFO_TOKEN ?? null,
+    },
+    bluesky: {
+      enabled: parsed.LE_BLUESKY === 'on' && parsed.LE_JOBS === 'on',
+      jetstreamUrl: parsed.LE_JETSTREAM_URL.replace(/\/+$/, ''),
     },
   };
 }

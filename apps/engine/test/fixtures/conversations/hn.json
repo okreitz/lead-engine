@@ -1,0 +1,52 @@
+{
+  "exhaustive": { "nbHits": true },
+  "exhaustiveNbHits": true,
+  "hits": [
+    {
+      "_highlightResult": {},
+      "_tags": ["comment", "author_sample_dev", "story_50485793"],
+      "author": "sample_dev",
+      "children": [],
+      "comment_text": "We&#x27;re a 12-person agency and our CRM is a mess.<p>Is there a <i>simple CRM alternative</i> to HubSpot that doesn&#x27;t cost $800/month? Email me at someone@example.com",
+      "created_at": "2026-11-16T03:27:18Z",
+      "created_at_i": 1794799638,
+      "objectID": "50513742",
+      "parent_id": 50485793,
+      "story_id": 50485793,
+      "story_title": "Do not build your own CRM",
+      "story_url": "https://example.com/crm-post",
+      "updated_at": "2026-11-16T03:30:00Z"
+    },
+    {
+      "_highlightResult": {},
+      "_tags": ["story", "author_launcher", "story_50510001"],
+      "author": "launcher",
+      "children": [],
+      "created_at": "2026-11-16T01:00:00Z",
+      "created_at_i": 1794790800,
+      "num_comments": 3,
+      "objectID": "50510001",
+      "points": 5,
+      "story_id": 50510001,
+      "story_text": "Ask HN: what do small teams use instead of spreadsheets for sales pipelines?",
+      "title": "Ask HN: Lightweight CRM recommendations?",
+      "updated_at": "2026-11-16T02:00:00Z",
+      "url": null
+    },
+    {
+      "_highlightResult": {},
+      "_tags": ["comment", "author_x"],
+      "author": "x",
+      "comment_text": "",
+      "created_at_i": "bad",
+      "objectID": "not-a-number"
+    }
+  ],
+  "hitsPerPage": 100,
+  "nbHits": 2,
+  "nbPages": 1,
+  "page": 0,
+  "params": "query=crm+alternative&tags=%28story%2Ccomment%29&typoTolerance=false",
+  "processingTimeMS": 1,
+  "query": "crm alternative"
+}

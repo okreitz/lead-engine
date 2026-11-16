@@ -128,8 +128,18 @@ No accounts were created, no keys were used and nothing was spent. Live calls us
 
 ## Stream 2: conversation intent
 
+Rechecked **2026-11-16** for Phase 4 (live calls from the build container unless marked docs). What the code does is in `apps/engine/src/conversations/sources/`.
+
+| Source | Endpoint and auth (as built) | Limit we plan for | Schedule as built | Through the provider layer |
+|---|---|---|---|---|
+| Hacker News | `GET hn.algolia.com/api/v1/search_by_date`, no key | 10,000/h per IP | every 15 min, 1 request per phrase | no (free, unmetered) |
+| Bluesky | Jetstream v2 WebSocket via `@bsky/jetstream` 1.0.0, no key | none published | live, one connection per engine | no (free, unmetered) |
+| Stack Exchange | `GET api.stackexchange.com/2.3/search/advanced`, `key=` query parameter | 10,000/day per IP with a key; `backoff` | hourly, ≤ 24 phrase × site pairs per run, rotating | yes: free daily quota, $0 paid cap |
+| GitHub | REST `search/issues` + GraphQL `search(type: DISCUSSION)`, `Authorization: Bearer <token>` | 30 searches/min; 5,000 GraphQL points/h | daily, 2 calls per phrase, 2.5 s apart | yes: free, $0 paid cap |
+| Reddit | Serper `POST google.serper.dev/search`, `X-API-KEY` | 2,500 free queries once | daily, ≤ 10 queries, 4 phrases OR-ed per query | yes: lifetime free quota, $0 paid cap |
+
 ### Hacker News (Algolia)
-- **Endpoint & auth:** `GET https://hn.algolia.com/api/v1/search_by_date`, no auth. URL-encode `tags=(story,comment)` and `numericFilters` (raw `(`/`>` gives 400). (live)
+- **Endpoint & auth:** `GET https://hn.algolia.com/api/v1/search_by_date`, no auth. URL-encode `tags=(story,comment)` and `numericFilters` (raw `(`/`>` gives 400). (live 2026-11-16: 200)
 - **Request:**
   - `query`
   - `tags=(story,comment)`
@@ -139,21 +149,23 @@ No accounts were created, no keys were used and nothing was spent. Live calls us
   - **`typoTolerance=false`**. Live check: `crm` over the last 24 h gave **3,076 hits with typo tolerance vs 2 without**; it matches "com".
   - Re-check the phrase locally anyway.
   - At most 1,000 results per query.
+  - A quoted query switches on `advancedSyntax` (seen in the echoed `params`, 2026-11-16) and asks for the exact phrase. We send the phrase unquoted (all words required) and let the local prefilter decide.
 - **Response** (live):
   - Envelope: `hits[]`, `nbHits` (approximate), `nbPages`, `page`.
   - Stories: `objectID`, `title`, `url`, `story_text`, `author`, `created_at_i`.
   - Comments: `objectID`, `comment_text`, `story_id`, `story_title`, `story_url`, `parent_id`, `author`, `created_at_i`.
   - Thread URL: `https://news.ycombinator.com/item?id=<objectID>`.
+  - Comment text is HTML and can hold email addresses (seen 2026-11-16): we redact emails and phone numbers before storing or scoring.
 - **Limits:** 10,000 requests/hour per IP (docs: text in hn.algolia.com/api's own bundle). No rate-limit headers. (live)
 - **Price:** $0.
 - **Terms:**
-  - Credit "Hacker News Search powered by Algolia".
+  - Credit "Hacker News Search powered by Algolia" (shown under the inbox).
   - YC's site terms forbid scraping news.ycombinator.com and harvesting contact info (https://www.ycombinator.com/legal), so we use the API only.
   - No explicit commercial-use clause was found **[unverified]**.
 
 ### Bluesky Jetstream
 - **Endpoint & auth:** no auth for the live tail. (docs: https://bsky.network/docs/jetstream/; live)
-  - **v2 (use this):** `wss://jetstream.us-east.bsky.network/xrpc/network.bsky.jetstream.subscribeEvents?collections=app.bsky.feed.post&kinds=commit`, subprotocol `xrpc.v1.json`. us-west is also available. Cursor = `seq`; delivery is at-least-once, so dedupe on the `at://` URI.
+  - **v2 (use this):** `wss://jetstream.us-east.bsky.network/xrpc/network.bsky.jetstream.subscribeEvents?collections=app.bsky.feed.post&kinds=commit`, subprotocol `xrpc.v1.json`. us-west is also available. Cursor = `seq`; delivery is at-least-once, so dedupe on the `at://` URI. (live 2026-11-16 with Node's WebSocket: open, `xrpc.v1.json`)
   - v1 (legacy, still up): `wss://jetstream{1,2}.us-{east,west}.bsky.network/subscribe?wantedCollections=app.bsky.feed.post`, cursor = `time_us`, `compress=true` (zstd + dictionary, about 56% smaller).
 - **Message (v2, live, trimmed):**
   ```json
@@ -162,58 +174,64 @@ No accounts were created, no keys were used and nothing was spent. Live calls us
    "collection":"app.bsky.feed.post","rkey":"3mzss4vwlgs26",
    "record":{"$type":"app.bsky.feed.post","createdAt":"2026-11-08T16:06:04.784Z","langs":["en"],"text":"…"}}}
   ```
-  Post URL: `https://bsky.app/profile/<did>/post/<rkey>`.
-- **Volume:** posts only, about 50 messages/s and about 45 KB/s uncompressed, so about 4 GB/day. (live, 8 s samples) Parse as a stream to stay inside the RSS budget. About 5% of commits are deletes. No published per-client limit **[unverified]**.
-- **Client:** `@bsky/jetstream` 1.0.0, licence "MIT OR Apache-2.0", official, v2. (npm) Node 22's global `WebSocket` also works. (live)
+  Through `@bsky/jetstream` with `raw: true` the client yields `{did, seq, time, kind: "commit", commit: {operation, collection, rkey, rev, cid, record}}` (live 2026-11-16). Post URL: `https://bsky.app/profile/<did>/post/<rkey>`.
+- **Volume:** posts only, about 30–50 messages/s and about 30–45 KB/s uncompressed (live 2026-11-08 and 2026-11-16, 15–60 s samples). About 5% of commits are deletes. No published per-client limit **[unverified]**.
+- **Client:** `@bsky/jetstream` 1.0.0, licence "MIT OR Apache-2.0", official, v2, Node ≥ 22.15; peer dependency `@atproto/lex` ^0.3 (we pin 0.3.15, MIT). It reconnects by itself and resumes from its cursor store. **Memory (2026-11-16, 60 s live, raw mode):** a Node process with the client loaded and the stream open stayed at 75–76 MB RSS, heap 9–10 MB, with no growth; the engine loads the client only when a workspace needs Bluesky.
 - **Price:** $0.
 - **Terms** (https://bsky.network/docs/developer-guidelines):
   - No "automated or bulk interactions", which matches our no-auto-reply rule.
-  - Honour deletion requests and events.
+  - Honour deletion requests and events: delete commits remove the stored post.
   - No explicit commercial-use ban, but no explicit permission either **[unverified]**.
 
 ### Stack Exchange API
-- **Endpoint & auth:** `GET https://api.stackexchange.com/2.3/search/advanced`, gzip responses. The key is optional; register an app at https://stackapps.com/apps/oauth/register. (live/docs)
-- **Request:** `q`, `site`, `fromdate`, `sort=creation`, `order=desc`, `pagesize`, `filter=withbody`, `key`.
+- **Endpoint:** `GET https://api.stackexchange.com/2.3/search/advanced`, gzip responses. (live 2026-11-16)
+- **Auth (resolved 2026-11-16):** register an application at https://stackapps.com/applications and use **Generate API Key** (new 2025 dashboard; no OAuth or client secret for public reads). The Stack Apps help page "API Authentication (2025)" (https://stackapps.com/help/api-authentication) says: *"If you are using an API key, include the query parameter `key` with your API request"*. The older page api.stackexchange.com/docs/authentication says to send it as `Authorization: Bearer`. Live, both are read: an unknown `key=` gives `400 bad_parameter "key doesn't match a known application"`, and an unknown Bearer value gives `402 invalid_access_token` (it is read as an access token). **We send `key=`**, as the newer page says; the `LE_E2E=1` test checks it with a real key.
+  - The help page also says a `User-Agent` header is required; we send ours.
+- **Request:** `q`, `site`, `fromdate`, `sort=creation`, `order=desc`, `pagesize` (50), `filter=withbody`, `key`.
 - **Response** (live):
-  - `items[]`: `question_id`, `title`, `link`, `creation_date`, `tags[]`, `owner.display_name`, `owner.link`, `content_license`.
+  - `items[]`: `question_id`, `title`, `body` (HTML, with `withbody`), `link`, `creation_date`, `tags[]`, `owner.display_name`, `owner.link`, `content_license`.
   - Envelope: `has_more`, `quota_max`, `quota_remaining`, `backoff` (only when set).
 - **Limits:**
-  - **300/day per IP without a key** (live `quota_max: 300`); **10,000/day with a key** by default.
+  - **300/day per IP without a key** (live `quota_max: 300`); **10,000/day with a key** by default. The quota is per IP, so every workspace on one server shares it: we stop for the day below 50 remaining.
   - More than 30 requests/s per IP gets temporarily banned.
-  - **Honour `backoff`.**
+  - **Honour `backoff`** (seconds, per method): we stop the run and wait.
   - (docs: https://api.stackexchange.com/docs/throttle)
 - **Price:** $0.
 - **Terms** (https://stackoverflow.com/legal/api-terms-of-use):
   - Apps must "visually indicate that the Stack Exchange Network is the source".
-  - Content is **CC BY-SA 4.0**: link to the question and name the author.
+  - Content is **CC BY-SA 4.0**: link to the question and name the author (the inbox does both).
   - The public network ToS restriction on commercial storage explicitly excludes API content.
 
 ### GitHub search
-- **Endpoint & auth:** `GET https://api.github.com/search/issues?q=…&per_page=100`, `Authorization: Bearer <token>`, `X-GitHub-Api-Version: 2022-11-28`.
+- **Issues:** `GET https://api.github.com/search/issues?q=…&sort=created&order=desc&per_page=50`, `Authorization: Bearer <token>`, `X-GitHub-Api-Version: 2022-11-28`. (live 2026-11-16: 200, `X-Ratelimit-Resource: search`, `X-Ratelimit-Limit: 30`)
 - **Query** (live):
   - `is:issue` or `is:pull-request` is required (422 otherwise).
   - **`is:discussion` is rejected by REST (422).** Discussions need GraphQL `search(type: DISCUSSION)` with a token.
   - Spaces mean **AND** now (advanced search is the default). Use `OR` with parentheses.
+  - A quoted phrase still matches loosely: `"crm alternative"` returned an issue whose text only had "CRM" and "Alternative" apart (2026-11-16), so the prefilter re-checks.
   - Queries ≤ 256 chars and ≤ 5 operators; ≤ 1,000 results per search.
-- **Response:** `total_count`, `incomplete_results`, `items[]`: `html_url`, `title`, `body`, `user.login`, `created_at`, `repository_url`, `state`, `comments`. Filter out `[bot]` authors. (live)
-- **Limits:** search allows 30/min authenticated and 10/min unauthenticated. (docs: https://docs.github.com/en/rest/search/search; live header `X-RateLimit-Limit: 30`) GraphQL point costs **[unverified]**.
-  - Caveat: the sandbox proxy adds a GitHub credential, so the keyless tests ran authenticated.
+- **Response:** `total_count`, `incomplete_results`, `items[]`: `html_url`, `title`, `body`, `user.login`, `user.type` (`Bot` for bots), `created_at`, `repository_url`, `state`, `comments`, `pull_request` (only on PRs). Bot authors and PRs are skipped. (live)
+- **Discussions (docs 2026-11-16, https://docs.github.com/en/graphql/reference):** `POST https://api.github.com/graphql`, `search(query: String!, type: DISCUSSION, first: Int)` → `discussionCount`, `nodes { ... on Discussion { url title bodyText createdAt isAnswered author { login __typename } repository { nameWithOwner } } }`. GraphQL could not be called from the build container (its proxy blocks it), so this is **docs only**; the `LE_E2E=1` test covers it with a token.
+- **Limits:** search allows 30/min authenticated and 10/min unauthenticated (docs: https://docs.github.com/en/rest/search/search). GraphQL: 5,000 points/hour per user token; a call costs at least 1 point; secondary limit 2,000 points/min (docs: rate-limits-and-query-limits-for-the-graphql-api).
+- **Key:** a fine-grained personal access token with "Public repositories" access and no permissions (https://github.com/settings/personal-access-tokens/new). Without a key the source waits.
 - **Price:** $0.
 - **Terms** (GitHub Acceptable Use Policies):
   - API collection isn't scraping.
-  - Don't use the information for spam, unsolicited email or selling personal info. ⇒ Never extract emails from issues; link out only.
+  - Don't use the information for spam, unsolicited email or selling personal info. ⇒ Never extract emails from issues (we redact them); link out only.
 
 ### Serper (Reddit via Google SERP)
-- **Endpoint & auth:** `POST https://google.serper.dev/search`, headers `X-API-KEY: <key>` and `Content-Type: application/json`. (docs: the serper.dev playground; no live call, since a key is needed)
-- **Request:** `{"q":"site:reddit.com \"<phrase>\"","gl":"us","hl":"en","tbs":"qdr:d","page":1}`.
+- **Endpoint & auth:** `POST https://google.serper.dev/search`, headers `X-API-KEY: <key>` and `Content-Type: application/json`. (live 2026-11-16: an invalid key returns `403 {"message":"Unauthorized.","statusCode":403}`)
+- **Request:** `{"q":"site:reddit.com (\"<phrase a>\" OR \"<phrase b>\")","gl":"us","hl":"en","tbs":"qdr:d","page":1}`.
   - `tbs=qdr:d` is the past 24 h.
   - `num` is effectively 10 for `search`; page with `page`.
-- **Response:** `organic[]`: `title`, `link`, `snippet`, `position`, and sometimes `date` (relative text such as "4 months ago": optional, don't parse).
+  - We OR up to 4 phrases per query and run at most 10 queries a day, rotating, so the free grant lasts months.
+- **Response:** `organic[]`: `title`, `link`, `snippet`, `position`, and sometimes `date` (relative text such as "4 months ago": optional, don't parse). Only `reddit.com/r/<sub>/comments/<id>` links are kept.
 - **Limits & free quota:**
-  - **2,500 free queries**, no card. Their expiry is **[unverified]**: it's not on public pages.
+  - **2,500 free queries**, no card (serper.dev homepage, 2026-11-16). Their expiry is **[unverified]**: it's not on public pages. We count them per workspace as a lifetime quota.
   - A Google search costs 1 credit; credits are charged only on successful responses.
   - Starter allows 50 queries/s.
-- **Price** (https://serper.dev/, checked 2026-11-08, excl. tax; credits valid 6 months):
+  - What Serper returns once credits are gone is **[unverified]** (no key); a 400/402 stops the source.
+- **Price** (https://serper.dev/, checked 2026-11-16, unchanged since 2026-11-08, excl. tax; credits valid 6 months):
 
   | Pack | Price | Credits | $ / 1k |
   |---|---|---|---|
@@ -222,7 +240,7 @@ No accounts were created, no keys were used and nothing was spent. Live calls us
   | Scale | $1,250 | 2.5M | $0.50 |
   | Ultimate | $3,750 | 12.5M | $0.30 |
 
-  research.md's "about $1 per 1,000" is right, but the **minimum purchase is $50** (finding #6).
+  research.md's "about $1 per 1,000" is right, but the **minimum purchase is $50** (finding #6). Paid queries are capped at **$0** in code.
 - **Terms** (https://serper.dev/terms, updated 2024-05-29):
   - B2B; no restriction on commercial use.
   - **No more than one account at a time**, so the hosted service can't open one Serper account per workspace for itself. BYO key per workspace is fine.
@@ -704,7 +722,7 @@ Create an IAM user with only this policy, then an access key ("Other"), and ente
 The action has no resource types, so `Resource` must be `"*"`. The SES guide's sample adds `iam:CreateServiceLinkedRole` for CloudWatch metrics; whether calls fail without it is [unverified], so start without it and add it only if AWS asks.
 
 ### Notes from the check
-- Stack Exchange: the 2025 Stack Apps help says to send the key as `Authorization: Bearer` and generate it with "Generate API Key" (new dashboard). providers.md says `key=` is optional and points to `/apps/oauth/register`. Re-check which auth style v2.3 accepts with `LE_E2E=1`.
+- Stack Exchange auth: resolved 2026-11-16 (see "Stack Exchange API" above): `key=` query parameter, key from "Generate API Key" at stackapps.com/applications.
 - SES validation reports **no catch-all**, so it can't fill `Contact.emailStatus = catch_all` (Reacher's `smtp.is_catch_all` can).
 
 ---
@@ -712,17 +730,17 @@ The action has no resource types, so `Resource` must be `"*"`. The SES guide's s
 ## Getting your keys
 
 <!-- generated:provider-help -->
-Generated from `PROVIDER_HELP` in `packages/shared/src/provider-help.ts` (links checked 2026-11-15). "docs" means the vendor has no direct key page.
+Generated from `PROVIDER_HELP` in `packages/shared/src/provider-help.ts` (links checked 2026-11-16). "docs" means the vendor has no direct key page.
 
 | Provider | Where it goes | Used for | Cost | Link | Minimum scope |
 |---|---|---|---|---|---|
-| Anthropic API | Settings → Provider keys | LLM for offer drafts, fit scoring and people extraction | pay as you go; claude-haiku-5-5 is $0.10 / $0.50 per million input / output tokens | [create](https://platform.claude.com/settings/keys) | no scopes; set a monthly spend limit in the Claude Console as a second cap |
+| Anthropic API | Settings → Provider keys | LLM for offer drafts, fit scoring, people extraction and inbox thread scoring | pay as you go; claude-haiku-5-5 is $0.10 / $0.50 per million input / output tokens | [create](https://platform.claude.com/settings/keys) | no scopes; set a monthly spend limit in the Claude Console as a second cap |
 | Amazon SES | Settings → Provider keys | Email validation (SES Email Validation API), before Icypeas; never sending | $0.01 per address validated; no free tier for validation | [create](https://console.aws.amazon.com/iam/home#/users) | an IAM user whose only policy allows ses:GetEmailAddressInsights on Resource "*"; create an access key ("Other"), then enter the key ID, secret and SES region |
 | Icypeas | Settings → Provider keys | Email finder (and verifier when neither Reacher nor SES is set); never Find People | from $19/month for 1,000 credits; verify 0.1 credit, find 1 credit only when found | [create](https://app.icypeas.com/bo/api) | turn on "Activate API Access", then copy the API key (no scopes) |
 | ipapi.is | Settings → Provider keys | Website visitors (stream 1): classifies US visitor IPs (business, ISP, mobile, hosting, VPN) and names the company | free key: 1,000 lookups/day, commercial use allowed; capped at the free tier here ($0 paid) | [create](https://ipapi.is/app/signup) | no scopes; the key is shown at ipapi.is/app after signup. One account per workspace (their terms forbid sharing a key) |
-| Serper (later phase) | Settings → Provider keys | Reddit threads via Google search (stream 2, Phase 4) | 2,500 free queries, no card; paid packs start at $50 (capped at $0 here) | [create](https://serper.dev/api-keys) | no scopes |
-| Stack Exchange (later phase) | Settings → Provider keys | Stack Exchange question search (stream 2, Phase 4) | free; 10,000 requests/day with a key | [create](https://stackapps.com/apps/oauth/register) | register an app, then "Generate API Key"; read-only, no OAuth needed |
-| GitHub (later phase) | Settings → Provider keys | Issue search (stream 2, Phase 4) | free; 30 searches/minute with a token | [create](https://github.com/settings/personal-access-tokens/new) | fine-grained token, "Public repositories" access, no permissions |
+| Serper | Settings → Provider keys | Inbox (stream 2): Reddit threads found through Google search (site:reddit.com), daily; only URL, title and snippet are kept | 2,500 free queries once, no card; paid packs start at $50, so paid queries are capped at $0 here | [create](https://serper.dev/api-keys) | no scopes; one Serper account per workspace (their terms allow one account per person) |
+| Stack Exchange | Settings → Provider keys | Inbox (stream 2): Stack Exchange question search (/search/advanced), hourly | free; 10,000 requests/day per IP with a key | [create](https://stackapps.com/applications) | register an application, then "Generate API Key" (no OAuth, no client secret needed); set an expiry date |
+| GitHub | Settings → Provider keys | Inbox (stream 2): issue search (REST) and discussion search (GraphQL), daily | free; 30 searches/minute and 5,000 GraphQL points/hour per token | [create](https://github.com/settings/personal-access-tokens/new) | fine-grained token, Repository access "Public repositories", no permissions (it can only read public data) |
 | IPinfo Lite | LE_IPINFO_TOKEN | Optional country/ASN database for the collector instead of DB-IP Lite (downloaded at runtime, never shipped) | free; CC BY-SA 4.0, attribution "IP address data is powered by IPinfo" | [create](https://ipinfo.io/signup) | no scopes; the token is at ipinfo.io/dashboard/token |
 | DB-IP Lite | none (default, no account) | Country and ASN of visitor IPs, downloaded monthly to the data volume | free; CC BY 4.0, attribution "IP Geolocation by DB-IP" on pages using results | [docs](https://db-ip.com/db/lite.php) | — |
 | SAM.gov (later phase) | Settings → Provider keys | Optional monthly entity extract (not built yet) | free; 10 requests/day without a SAM.gov role | [docs](https://open.gsa.gov/api/entity-api/) | public API key from your SAM.gov Account Details page (shown once after re-entering your password) |

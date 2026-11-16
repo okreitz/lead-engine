@@ -8,6 +8,7 @@ import type { AppContext } from './context.ts';
 import { HttpError } from './http.ts';
 import { registerAuthRoutes } from './routes/auth.ts';
 import { registerBudgetRoutes } from './routes/budget.ts';
+import { registerConversationRoutes } from './routes/conversations.ts';
 import { registerCrmRoutes } from './routes/crm.ts';
 import { registerOfferRoutes } from './routes/offers.ts';
 import { registerSummaryRoutes } from './routes/summary.ts';
@@ -55,6 +56,7 @@ export function buildApi(ctx: AppContext, options: ApiOptions = {}): FastifyInst
     registerPersonaRoutes(scoped, ctx);
     registerPeopleRoutes(scoped, ctx);
     registerVisitorRoutes(scoped, ctx);
+    registerConversationRoutes(scoped, ctx);
   });
 
   app.setErrorHandler((error, request, reply) => {

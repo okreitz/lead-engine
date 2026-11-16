@@ -1,0 +1,32 @@
+{
+  "searchParameters": {
+    "q": "site:reddit.com (\"crm alternative\")",
+    "gl": "us",
+    "hl": "en",
+    "type": "search",
+    "tbs": "qdr:d",
+    "engine": "google"
+  },
+  "organic": [
+    {
+      "title": "Best CRM alternative for a tiny agency? : r/smallbusiness",
+      "link": "https://www.reddit.com/r/smallbusiness/comments/1abc2de/best_crm_alternative_for_a_tiny_agency/",
+      "snippet": "We need a CRM alternative to HubSpot, our team is 8 people and the bill keeps growing ...",
+      "date": "5 hours ago",
+      "position": 1
+    },
+    {
+      "title": "r/sales - wiki",
+      "link": "https://www.reddit.com/r/sales/wiki/index",
+      "snippet": "CRM alternative list",
+      "position": 2
+    },
+    {
+      "title": "Not reddit",
+      "link": "https://example.com/crm-alternative",
+      "snippet": "CRM alternative",
+      "position": 3
+    }
+  ],
+  "credits": 1
+}

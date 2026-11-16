@@ -1,4 +1,6 @@
 import type { AppContext } from '../api/context.ts';
+import { conversationPollHandler } from '../conversations/poll.ts';
+import { threadScoreHandler } from '../conversations/score.ts';
 import { Crawler } from '../crawler/crawler.ts';
 import { offerDraftHandler } from '../offer/draft.ts';
 import { emailFindHandler, peopleFindHandler, queuePeopleForRun } from '../people/jobs.ts';
@@ -17,5 +19,7 @@ export function jobHandlers(ctx: AppContext): Record<string, JobHandler> {
     'persona.fit': personaFitHandler(getCrawler),
     'people.find': peopleFindHandler(getCrawler),
     'email.find': emailFindHandler(),
+    'conversations.poll': conversationPollHandler(),
+    'conversations.score': threadScoreHandler(),
   };
 }

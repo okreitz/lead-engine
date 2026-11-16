@@ -15,6 +15,10 @@ yauzl (https://github.com/thejoshwolfe/yauzl)
 node-maxmind (https://github.com/runk/node-maxmind) and mmdb-lib
   MIT License, Copyright (c) Dmitry Shirokov. Used as a dependency to read .mmdb files.
 
+@bsky/jetstream (https://github.com/bluesky-social/bsky, packages/jetstream) and @atproto/lex
+  MIT OR Apache-2.0 (@bsky/jetstream), MIT (@atproto/lex), Copyright (c) Bluesky
+  Social PBC. Used as dependencies to read the Bluesky Jetstream (stream 2).
+
 isbot (https://github.com/omrilotan/isbot)
   The Unlicense (public domain). Used as a dependency to recognise bot user agents.
 
@@ -52,3 +56,9 @@ People Data Labs free company dataset (https://www.peopledatalabs.com/company-da
 SEC EDGAR company tickers (https://www.sec.gov/files/company_tickers_exchange.json)
   U.S. Securities and Exchange Commission public data; used to tag companies with their
   CIK and ticker.
+
+== Third-party content shown in the inbox (linked, not redistributed) ==
+
+Stack Exchange questions: CC BY-SA 4.0; the inbox names the source, links the question and shows
+the author's display name (Stack Exchange API terms).
+Hacker News: "Hacker News Search powered by Algolia".
