@@ -3,6 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BudgetMeter } from '@/components/blocks/budget-meter';
 import { EmptyState, SkeletonRows } from '@/components/blocks/empty-state';
 import { ScoreCell } from '@/components/blocks/score';
+import Link from 'next/link';
+import {
+  THREAD_LABEL_TEXT,
+  THREAD_SOURCE_LABELS,
+  type ThreadLabel,
+  type ThreadSource,
+} from '@le/shared';
 import { api } from '@/lib/api';
 import { useSheet } from '@/lib/sheet';
 import { cn } from '@/lib/utils';
@@ -33,6 +40,17 @@ interface Today {
   budget: { budgetUsd: number; spentUsd: number; state: string };
   offer: { offerId: string; version: number; approvedAt: number } | null;
   accountCount: number;
+  inbox: {
+    counts: { priority: number; all: number };
+    top: {
+      id: string;
+      source: ThreadSource;
+      title: string;
+      intent: number | null;
+      label: ThreadLabel | null;
+      postedAt: number;
+    }[];
+  } | null;
 }
 
 function ago(ms: number, now: number): string {
@@ -138,10 +156,42 @@ export default function TodayPage() {
               <h2 id="inbox-h" className="border-b px-4 py-2 text-sm font-semibold">
                 Inbox
               </h2>
-              <p className="text-muted-foreground px-4 py-3 text-sm">
-                Conversations from Hacker News, Bluesky, Stack Exchange, GitHub and Reddit arrive in
-                Phase 4.
-              </p>
+              {t.inbox?.top.length ? (
+                <ul>
+                  {t.inbox.top.map((th) => (
+                    <li key={th.id} className="border-b last:border-0">
+                      <Link
+                        href={`/inbox?thread=${th.id}`}
+                        className="hover:bg-accent/50 flex items-center gap-2 px-4 py-2 text-sm"
+                      >
+                        <span className="w-4 shrink-0 text-center font-semibold tabular-nums">
+                          {th.intent ?? '–'}
+                        </span>
+                        <span className="text-muted-foreground w-10 shrink-0 text-[11px]">
+                          {THREAD_SOURCE_LABELS[th.source].short}
+                        </span>
+                        <span className="min-w-0 truncate">{th.title}</span>
+                        {th.label && th.label !== 'none' ? (
+                          <span className="bg-muted ml-auto shrink-0 rounded px-1.5 py-0.5 text-[11px]">
+                            {THREAD_LABEL_TEXT[th.label]}
+                          </span>
+                        ) : null}
+                      </Link>
+                    </li>
+                  ))}
+                  <li className="px-4 py-2 text-xs">
+                    <Link href="/inbox" className="underline underline-offset-2">
+                      {t.inbox.counts.priority} in Priority · open the inbox
+                    </Link>
+                  </li>
+                </ul>
+              ) : (
+                <p className="text-muted-foreground px-4 py-3 text-sm">
+                  {t.offer
+                    ? 'No new conversations. Threads where people ask for what you sell appear here once scored.'
+                    : 'Approve your offer profile: its intent phrases drive the inbox searches.'}
+                </p>
+              )}
             </section>
             <section aria-labelledby="ns-h" className="rounded-xl border">
               <h2 id="ns-h" className="border-b px-4 py-2 text-sm font-semibold">

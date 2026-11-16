@@ -70,6 +70,7 @@ function readSidebar(): boolean {
 interface TodayLite {
   budget: { budgetUsd: number; spentUsd: number; state: string };
   offer: { version: number } | null;
+  inbox: { counts: { priority: number } } | null;
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -177,7 +178,12 @@ function ShellInner({ children }: { children: ReactNode }) {
   const t = today.data;
   const nav: NavItem[] = [
     { href: '/', label: 'Today', icon: Sun },
-    { href: '/inbox', label: 'Inbox', icon: Inbox, comingIn: 'Phase 4' },
+    {
+      href: '/inbox',
+      label: 'Inbox',
+      icon: Inbox,
+      badge: t?.inbox?.counts.priority ? String(t.inbox.counts.priority) : null,
+    },
     { href: '/accounts', label: 'Accounts', icon: LayoutList },
     { href: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
     { href: '/visitors', label: 'Visitors', icon: Radar },

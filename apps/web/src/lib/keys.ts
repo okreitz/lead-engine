@@ -60,6 +60,12 @@ export const SHORTCUTS: { group: string; keys: string; label: string }[] = [
     label: 'Wrong company: correct the IP match of the selected row',
   },
   { group: 'Visitors', keys: 'Enter', label: 'Show or hide the page path of the selected row' },
+  { group: 'Inbox', keys: 'J / K', label: 'Next / previous thread' },
+  { group: 'Inbox', keys: 'O', label: 'Open the thread on its site' },
+  { group: 'Inbox', keys: 'R', label: 'Mark replied (you post the reply yourself)' },
+  { group: 'Inbox', keys: 'X', label: 'Not relevant (dismiss; scoring learns from it)' },
+  { group: 'Inbox', keys: 'A', label: 'Create account (only when the poster named a US company)' },
+  { group: 'Inbox', keys: 'H', label: 'Snooze for 3 days, or unsnooze' },
 ];
 
 export const GO_TO: Record<string, string> = {
