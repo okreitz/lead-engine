@@ -1,3 +1,4 @@
+import { clearIpapiBackoff } from '../../providers/ipapi.ts';
 import {
   addMemberBodySchema,
   createTokenBodySchema,
@@ -354,6 +355,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: AppContext): 
       now,
     );
     resumeWaitingJobs(ctx.db, workspaceId, now);
+    if (provider === 'ipapi') clearIpapiBackoff(workspaceId);
     return { ok: true };
   });
 

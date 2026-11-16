@@ -180,7 +180,7 @@ function ShellInner({ children }: { children: ReactNode }) {
     { href: '/inbox', label: 'Inbox', icon: Inbox, comingIn: 'Phase 4' },
     { href: '/accounts', label: 'Accounts', icon: LayoutList },
     { href: '/pipeline', label: 'Pipeline', icon: KanbanSquare },
-    { href: '/visitors', label: 'Visitors', icon: Radar, comingIn: 'Phase 3' },
+    { href: '/visitors', label: 'Visitors', icon: Radar },
     {
       href: '/offer',
       label: 'Offer profile',

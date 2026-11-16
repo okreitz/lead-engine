@@ -18,6 +18,8 @@ import { api, errorMessage, fmtDate, usd } from '@/lib/api';
 import type { AccountDetail, FieldSource, Signal } from '@/lib/crm';
 import { useMe } from '@/lib/me';
 import { cn } from '@/lib/utils';
+import { confidenceLabel, markWrongCompany } from '@/lib/visitors';
+import { MATCH_SOURCE_LABELS } from '@le/shared';
 
 type SignalFilter = 'all' | 'visits' | 'threads' | 'fit' | 'hiring' | 'activity';
 const FILTERS: { key: SignalFilter; label: string }[] = [
@@ -169,6 +171,22 @@ export function AccountView({
             </>
           ) : (
             <>
+              {signals.some((s) => s.stream === 'visits' && s.payload.matchSource) ? (
+                <ConfirmButton
+                  trigger={
+                    <Button variant="outline" size="sm">
+                      Wrong company
+                    </Button>
+                  }
+                  title={`Wrong company: ${company.name}?`}
+                  description={`The IP ranges that matched ${company.domain} are marked wrong, so they never match it again, and the visits and visit signals that came through them are removed. The account stays. This is logged.`}
+                  confirmLabel="Mark wrong"
+                  onConfirm={async () => {
+                    await markWrongCompany(id);
+                    await qc.invalidateQueries();
+                  }}
+                />
+              ) : null}
               <Button
                 variant="outline"
                 size="sm"
@@ -560,10 +578,22 @@ function Fact({ k, v, sources }: { k: string; v: ReactNode; sources: FieldSource
 }
 
 export function describeSignal(payload: Record<string, unknown>): string {
+  const str = (k: string) => (typeof payload[k] === 'string' ? (payload[k] as string) : null);
   const parts: string[] = [];
-  for (const key of ['title', 'path', 'reason', 'summary']) {
-    const v = payload[key];
-    if (typeof v === 'string') parts.push(v);
+  const title = str('title');
+  if (title) parts.push(title);
+  const site = str('site');
+  const path = str('path');
+  if (path) parts.push(site ? `${site}${path}` : path);
+  for (const k of ['reason', 'summary']) {
+    const v = str(k);
+    if (v) parts.push(v);
+  }
+  const source = str('matchSource');
+  if (source) {
+    const c =
+      typeof payload.confidence === 'number' ? ` ${confidenceLabel(payload.confidence)}` : '';
+    parts.push(`match: ${MATCH_SOURCE_LABELS[source] ?? source}${c}`);
   }
   if (typeof payload.score === 'number') parts.push(`score ${payload.score}`);
   if (Array.isArray(payload.reasons)) parts.push(payload.reasons.slice(0, 2).join('; '));

@@ -54,6 +54,12 @@ export const SHORTCUTS: { group: string; keys: string; label: string }[] = [
   { group: 'Lists', keys: 'Enter', label: 'Open the full page' },
   { group: 'Lists', keys: 'S', label: 'Set stage of selected rows' },
   { group: 'Pipeline', keys: '[ / ]', label: 'Move the selected card one stage left / right' },
+  {
+    group: 'Visitors',
+    keys: 'W',
+    label: 'Wrong company: correct the IP match of the selected row',
+  },
+  { group: 'Visitors', keys: 'Enter', label: 'Show or hide the page path of the selected row' },
 ];
 
 export const GO_TO: Record<string, string> = {

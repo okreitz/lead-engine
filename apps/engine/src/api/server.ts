@@ -17,6 +17,7 @@ import { registerPeopleRoutes } from './routes/people.ts';
 import { registerPersonaRoutes } from './routes/persona.ts';
 import { registerUniverseRoutes } from './routes/universe.ts';
 import { registerViewRoutes } from './routes/views.ts';
+import { registerVisitorRoutes } from './routes/visitors.ts';
 import { registerWorkspaceRoutes } from './routes/workspaces.ts';
 
 export interface ApiOptions {
@@ -53,6 +54,7 @@ export function buildApi(ctx: AppContext, options: ApiOptions = {}): FastifyInst
     registerUniverseRoutes(scoped, ctx);
     registerPersonaRoutes(scoped, ctx);
     registerPeopleRoutes(scoped, ctx);
+    registerVisitorRoutes(scoped, ctx);
   });
 
   app.setErrorHandler((error, request, reply) => {
