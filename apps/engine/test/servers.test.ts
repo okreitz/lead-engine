@@ -29,17 +29,17 @@ describe('engine api', () => {
   });
 });
 
-describe('collector stub', () => {
+describe('bare collector listener', () => {
   const visit = { siteKey: 'site_12345678', path: '/pricing', at: 1_700_000_000_000 };
 
   it('answers its own health check', async () => {
-    const collector = track(buildCollector({ logLevel: 'silent' }));
+    const collector = track(buildCollector(null, null, { logLevel: 'silent' }).app);
     const res = await collector.inject({ method: 'GET', url: '/healthz' });
     expect(res.json()).toMatchObject({ status: 'ok', service: 'collector' });
   });
 
   it('rejects bodies over 2 KB', async () => {
-    const collector = track(buildCollector({ logLevel: 'silent' }));
+    const collector = track(buildCollector(null, null, { logLevel: 'silent' }).app);
     const res = await collector.inject({
       method: 'POST',
       url: '/collect/v',
@@ -49,7 +49,7 @@ describe('collector stub', () => {
   });
 
   it('rejects invalid bodies', async () => {
-    const collector = track(buildCollector({ logLevel: 'silent' }));
+    const collector = track(buildCollector(null, null, { logLevel: 'silent' }).app);
     const res = await collector.inject({
       method: 'POST',
       url: '/collect/v',
@@ -58,14 +58,14 @@ describe('collector stub', () => {
     expect(res.statusCode).toBe(400);
   });
 
-  it('accepts a valid body but stores nothing yet', async () => {
-    const collector = track(buildCollector({ logLevel: 'silent' }));
+  it('answers 503 without a pipeline and stores nothing', async () => {
+    const collector = track(buildCollector(null, null, { logLevel: 'silent' }).app);
     const res = await collector.inject({ method: 'POST', url: '/collect/v', payload: visit });
-    expect(res.statusCode).toBe(501);
+    expect(res.statusCode).toBe(503);
   });
 
   it('does not serve the authenticated api', async () => {
-    const collector = track(buildCollector({ logLevel: 'silent' }));
+    const collector = track(buildCollector(null, null, { logLevel: 'silent' }).app);
     const res = await collector.inject({ method: 'GET', url: '/api/v1/health' });
     expect(res.statusCode).toBe(404);
   });

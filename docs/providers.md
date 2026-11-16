@@ -67,6 +67,13 @@ No accounts were created, no keys were used and nothing was spent. Live calls us
   - The exception (§2.9): products where "your own users access the ipapi.is API with their own ipapi.is accounts and API keys". ⇒ Hosted = BYO key per workspace.
   - Rotating keys, accounts or IPs to get around quotas is prohibited (§6).
 
+- **Phase 3 check (2026-11-15, developer page "last updated November 6, 2026"):**
+  - Single lookups also work as `POST https://api.ipapi.is` with `{"q": "<ip>", "key": "<key>"}`. The page recommends the body "which keeps it out of URLs and logs"; the adapter uses it.
+  - Errors are JSON with a stable `error_code`: 403 `ERR_FORBIDDEN_INVALID_API_KEY`, 429 `ERR_QUOTA_EXCEEDED` (keyed) or `ERR_FREE_TIER_EXHAUSTED` (keyless). A bare 403 with an empty body means a firewall ban, so back off on 403 and 429.
+  - Detection flags now also include `is_satellite`, `is_anycast` and `egress_service` (e.g. iCloud Private Relay); the pipeline treats `egress_service` like a VPN.
+  - "Every field is always present and null when unknown" (keyless); `company` is null when no WHOIS record is known.
+  - We hold no key, so the keyed response shape is from the docs example; a real call is part of the `LE_E2E=1` checks.
+
 ### RDAP (ARIN and the rdap.org bootstrap)
 - **Endpoint & auth**
   - `GET https://rdap.arin.net/registry/ip/<ip>`, no auth. (live)
@@ -712,11 +719,12 @@ Generated from `PROVIDER_HELP` in `packages/shared/src/provider-help.ts` (links 
 | Anthropic API | Settings → Provider keys | LLM for offer drafts, fit scoring and people extraction | pay as you go; claude-haiku-5-5 is $0.10 / $0.50 per million input / output tokens | [create](https://platform.claude.com/settings/keys) | no scopes; set a monthly spend limit in the Claude Console as a second cap |
 | Amazon SES | Settings → Provider keys | Email validation (SES Email Validation API), before Icypeas; never sending | $0.01 per address validated; no free tier for validation | [create](https://console.aws.amazon.com/iam/home#/users) | an IAM user whose only policy allows ses:GetEmailAddressInsights on Resource "*"; create an access key ("Other"), then enter the key ID, secret and SES region |
 | Icypeas | Settings → Provider keys | Email finder (and verifier when neither Reacher nor SES is set); never Find People | from $19/month for 1,000 credits; verify 0.1 credit, find 1 credit only when found | [create](https://app.icypeas.com/bo/api) | turn on "Activate API Access", then copy the API key (no scopes) |
-| ipapi.is (later phase) | Settings → Provider keys | Website visitor company lookup (stream 1, Phase 3) | free key: 1,000 lookups/day, commercial use allowed | [create](https://ipapi.is/app/signup) | no scopes; the key is shown at ipapi.is/app after signup |
+| ipapi.is | Settings → Provider keys | Website visitors (stream 1): classifies US visitor IPs (business, ISP, mobile, hosting, VPN) and names the company | free key: 1,000 lookups/day, commercial use allowed; capped at the free tier here ($0 paid) | [create](https://ipapi.is/app/signup) | no scopes; the key is shown at ipapi.is/app after signup. One account per workspace (their terms forbid sharing a key) |
 | Serper (later phase) | Settings → Provider keys | Reddit threads via Google search (stream 2, Phase 4) | 2,500 free queries, no card; paid packs start at $50 (capped at $0 here) | [create](https://serper.dev/api-keys) | no scopes |
 | Stack Exchange (later phase) | Settings → Provider keys | Stack Exchange question search (stream 2, Phase 4) | free; 10,000 requests/day with a key | [create](https://stackapps.com/apps/oauth/register) | register an app, then "Generate API Key"; read-only, no OAuth needed |
 | GitHub (later phase) | Settings → Provider keys | Issue search (stream 2, Phase 4) | free; 30 searches/minute with a token | [create](https://github.com/settings/personal-access-tokens/new) | fine-grained token, "Public repositories" access, no permissions |
-| IPinfo Lite (later phase) | Settings → Provider keys | Optional country/ASN database instead of DB-IP (stream 1) | free; CC BY-SA 4.0, attribution required | [create](https://ipinfo.io/signup) | no scopes; the token is at ipinfo.io/dashboard/token |
+| IPinfo Lite | LE_IPINFO_TOKEN | Optional country/ASN database for the collector instead of DB-IP Lite (downloaded at runtime, never shipped) | free; CC BY-SA 4.0, attribution "IP address data is powered by IPinfo" | [create](https://ipinfo.io/signup) | no scopes; the token is at ipinfo.io/dashboard/token |
+| DB-IP Lite | none (default, no account) | Country and ASN of visitor IPs, downloaded monthly to the data volume | free; CC BY 4.0, attribution "IP Geolocation by DB-IP" on pages using results | [docs](https://db-ip.com/db/lite.php) | — |
 | SAM.gov (later phase) | Settings → Provider keys | Optional monthly entity extract (not built yet) | free; 10 requests/day without a SAM.gov role | [docs](https://open.gsa.gov/api/entity-api/) | public API key from your SAM.gov Account Details page (shown once after re-entering your password) |
 | SEC EDGAR User-Agent | LE_SEC_USER_AGENT | EDGAR import and officers; SEC requires a declared contact instead of a key | free; at most 10 requests/second | [docs](https://www.sec.gov/search-filings/edgar-search-assistance/accessing-edgar-data) | a contact like "Lead Engine admin@yourdomain.com" |
 | People Data Labs company dataset | Settings → Company data (download link) | Company universe import; no key, a download form | free; CC BY 4.0 | [create](https://www.peopledatalabs.com/company-dataset) | request the US file; paste the link they send into Settings → Company data |

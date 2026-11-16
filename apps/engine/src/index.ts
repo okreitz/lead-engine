@@ -1,6 +1,11 @@
 import { buildApi } from './api/server.ts';
 import type { AppContext } from './api/context.ts';
+import { GeoService } from './collector/geo.ts';
+import { VisitPipeline } from './collector/pipeline.ts';
 import { buildCollector } from './collector/server.ts';
+import { purgeIpLookupCache } from './providers/ipapi.ts';
+import { purgeIpCompanies } from './visits/record.ts';
+import { systemPtr } from './visits/ptr.ts';
 import { loadConfig } from './config.ts';
 import { openDb } from './db/client.ts';
 import { runMigrations } from './db/migrate.ts';
@@ -14,9 +19,18 @@ const config = loadConfig();
 const db = openDb(config.dbPath);
 runMigrations(db);
 
-const ctx: AppContext = { db, config, now: Date.now };
+const geo = new GeoService(
+  { dir: config.collector.geoDir, ipinfoToken: config.collector.ipinfoToken },
+  { download: config.collector.geoDownload, now: Date.now },
+);
+const ctx: AppContext = { db, config, now: Date.now, geo };
 const api = buildApi(ctx, { logLevel: config.logLevel });
-const collector = buildCollector({ logLevel: config.logLevel });
+const pipeline = new VisitPipeline({ ctx, geo: () => geo.current(), ptr: systemPtr() });
+const collector = buildCollector(ctx, pipeline, {
+  logLevel: config.logLevel,
+  clientIpHeader: config.collector.clientIpHeader,
+});
+geo.start();
 
 const runner = new JobRunner(ctx, jobHandlers(ctx));
 if (config.jobs) runner.start();
@@ -29,8 +43,15 @@ const rescoreTimer = setInterval(() => {
 }, 3600_000);
 rescoreTimer.unref();
 
+// Retention (SPEC §9): ipapi.is lookups 30 days, expired IP map rows.
+const purgeTimer = setInterval(() => {
+  purgeIpLookupCache(ctx);
+  purgeIpCompanies(ctx);
+}, 3600_000);
+purgeTimer.unref();
+
 await api.listen({ host: config.host, port: config.enginePort });
-await collector.listen({ host: config.host, port: config.collectorPort });
+await collector.app.listen({ host: config.host, port: config.collectorPort });
 
 let closing = false;
 async function shutdown(signal: string): Promise<void> {
@@ -38,7 +59,9 @@ async function shutdown(signal: string): Promise<void> {
   closing = true;
   api.log.info({ signal }, 'shutting down');
   runner.stop();
-  await Promise.allSettled([api.close(), collector.close()]);
+  geo.stop();
+  await Promise.allSettled([api.close(), collector.app.close()]);
+  await collector.queue.drain();
   db.$client.close();
   process.exit(0);
 }

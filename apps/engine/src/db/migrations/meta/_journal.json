@@ -50,6 +50,13 @@
       "when": 1794781035214,
       "tag": "0006_email_pattern",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794783655401,
+      "tag": "0007_visits",
+      "breakpoints": true
     }
   ]
 }

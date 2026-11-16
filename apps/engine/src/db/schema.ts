@@ -5,7 +5,10 @@
 // - No `linkedinUrl` on Company or Contact: we never store LinkedIn-derived data (CLAUDE.md).
 // - Auth tables (`sessions`, `api_tokens`), the offer version table, the provider cache and
 //   free-quota counters are added; SPEC §3 doesn't list them but §4/§8/§10 need them.
-// - Thread, Site, Visit, IpCompany and IpLookupCache arrive with streams 1 and 2 (Phases 3–4).
+// - Thread arrives with stream 2 (Phase 4).
+// - IpCompany and IpLookupCache carry `workspaceId`: ipapi.is data is licensed to the workspace
+//   whose key fetched it, and form fills belong to the workspace's own sites. Daily dropped-traffic
+//   counters (`visit_daily`) and daily session salts (`daily_salts`) are added for stream 1.
 import {
   index,
   integer,
@@ -573,6 +576,159 @@ export const personaCandidates = sqliteTable(
     index('persona_candidates_run_idx').on(t.runId, t.state, t.position),
   ],
 );
+
+// ---------------------------------------------------------------- stream 1: website visits
+
+/** A page path that marks buying intent on a site, e.g. { path: '/pricing', label: 'pricing' }. */
+export interface IntentPage {
+  path: string;
+  label: string;
+}
+
+/** A website running the snippet (SPEC §5.2). `siteKey` is public: it is in the snippet. */
+export const sites = sqliteTable(
+  'sites',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    domain: text('domain').notNull(),
+    siteKey: text('site_key').notNull().unique(),
+    intentPages: json<IntentPage[]>('intent_pages').notNull().default([]),
+    /** Last event the collector accepted for this site (install check). */
+    lastEventAt: ts('last_event_at'),
+    /** Last install check: snippet found on the homepage or not. */
+    checkedAt: ts('checked_at'),
+    checkOk: integer('check_ok', { mode: 'boolean' }),
+    checkNote: text('check_note'),
+    createdAt: ts('created_at').notNull(),
+  },
+  (t) => [uniqueIndex('sites_workspace_domain_uq').on(t.workspaceId, t.domain)],
+);
+
+export const MATCH_SOURCES = ['form', 'ptr', 'asn', 'provider', 'manual'] as const;
+export type MatchSource = (typeof MATCH_SOURCES)[number];
+
+/**
+ * A page view of a matched (US, business, company-identified) visitor. Unmatched traffic is
+ * never stored; it only increments `visit_daily`. No IP: `sessionHash` is an HMAC of IP,
+ * user agent and site under a salt that is deleted the next day.
+ */
+export const visits = sqliteTable(
+  'visits',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    siteId: text('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    accountId: text('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    sessionHash: text('session_hash').notNull(),
+    path: text('path').notNull(),
+    referrer: text('referrer'),
+    utm: json<Record<string, string>>('utm'),
+    /** How the company was matched, for the Match column and "Wrong company". */
+    matchSource: text('match_source', { enum: MATCH_SOURCES }).notNull(),
+    confidence: real('confidence').notNull(),
+    ipCompanyId: text('ip_company_id'),
+    at: ts('at').notNull(),
+  },
+  (t) => [
+    index('visits_site_at_idx').on(t.siteId, t.at),
+    index('visits_account_at_idx').on(t.accountId, t.at),
+    index('visits_session_idx').on(t.sessionHash, t.accountId),
+  ],
+);
+
+/**
+ * IP prefix → company domain (SPEC §5.2 "own IP map"). Ranges are stored as 32-hex-digit
+ * IPv6 values (IPv4 as ::ffff:a.b.c.d) so a containment check is a string comparison.
+ * `wrong` rows are corrections from "Wrong company": they block that match for the prefix.
+ */
+export const ipCompanies = sqliteTable(
+  'ip_companies',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    prefix: text('prefix').notNull(),
+    ipStart: text('ip_start').notNull(),
+    ipEnd: text('ip_end').notNull(),
+    /** Prefix length in IPv6 bits (an IPv4 /24 is 120), for "most specific wins". */
+    prefixLen: integer('prefix_len').notNull(),
+    companyDomain: text('company_domain').notNull(),
+    source: text('source', { enum: MATCH_SOURCES }).notNull(),
+    confidence: real('confidence').notNull(),
+    wrong: integer('wrong', { mode: 'boolean' }).notNull().default(false),
+    seenAt: ts('seen_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+  },
+  (t) => [
+    index('ip_companies_lookup_idx').on(t.workspaceId, t.ipStart, t.ipEnd),
+    uniqueIndex('ip_companies_prefix_uq').on(t.workspaceId, t.prefix, t.companyDomain),
+  ],
+);
+
+/** Trimmed ipapi.is results per workspace, 30-day TTL (ipapi.is terms §2.2). */
+export const ipLookupCache = sqliteTable(
+  'ip_lookup_cache',
+  {
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    ip: text('ip').notNull(),
+    result: json<Record<string, unknown>>('result').notNull(),
+    fetchedAt: ts('fetched_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspaceId, t.ip] }),
+    index('ip_lookup_cache_expires_idx').on(t.expiresAt),
+  ],
+);
+
+export const VISIT_OUTCOMES = [
+  'matched',
+  'non_us',
+  'bot',
+  'isp',
+  'mobile',
+  'hosting',
+  'vpn',
+  'unmatched',
+  'unclassified',
+  'suppressed',
+  'rate_limited',
+] as const;
+export type VisitOutcome = (typeof VISIT_OUTCOMES)[number];
+
+/** Aggregate daily counters per site and outcome; the only trace dropped traffic leaves. */
+export const visitDaily = sqliteTable(
+  'visit_daily',
+  {
+    siteId: text('site_id')
+      .notNull()
+      .references(() => sites.id, { onDelete: 'cascade' }),
+    /** UTC date, YYYY-MM-DD. */
+    day: text('day').notNull(),
+    outcome: text('outcome', { enum: VISIT_OUTCOMES }).notNull(),
+    sessions: integer('sessions').notNull().default(0),
+    pageviews: integer('pageviews').notNull().default(0),
+  },
+  (t) => [primaryKey({ columns: [t.siteId, t.day, t.outcome] })],
+);
+
+/** The current day's random session salt; older salts are deleted, so hashes can't be linked. */
+export const dailySalts = sqliteTable('daily_salts', {
+  day: text('day').primaryKey(),
+  salt: text('salt').notNull(),
+});
 
 // ---------------------------------------------------------------- control
 

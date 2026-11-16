@@ -36,6 +36,19 @@ const envSchema = z.object({
   LE_REACHER_SECRET: z.string().optional(),
   /** Minimum gap between Reacher checks to one recipient domain. */
   LE_REACHER_DOMAIN_INTERVAL_MS: z.coerce.number().int().min(0).default(60_000),
+  /** Public URL of the collector, used in the snippet (e.g. https://collect.example.com). */
+  LE_COLLECTOR_URL: z.string().url().optional(),
+  /** Header the reverse proxy puts the client IP in (Traefik: X-Real-Ip). */
+  LE_CLIENT_IP_HEADER: z
+    .string()
+    .regex(/^[A-Za-z0-9-]+$/)
+    .default('x-real-ip'),
+  /** Folder for the country/ASN .mmdb files. Default: `geo/` next to the DB. */
+  LE_GEO_DIR: z.string().optional(),
+  /** Download and refresh the .mmdb files at runtime (off in tests and offline setups). */
+  LE_GEO_DOWNLOAD: z.enum(['on', 'off']).default('on'),
+  /** Optional IPinfo Lite token: use IPinfo Lite (CC BY-SA) instead of DB-IP Lite. */
+  LE_IPINFO_TOKEN: z.string().min(6).optional(),
 });
 
 export interface Config {
@@ -53,6 +66,13 @@ export interface Config {
   importsDir: string;
   secUserAgent: string | null;
   reacher: { enabled: boolean; url: string; secret: string | null; domainIntervalMs: number };
+  collector: {
+    publicUrl: string;
+    clientIpHeader: string;
+    geoDir: string;
+    geoDownload: boolean;
+    ipinfoToken: string | null;
+  };
 }
 
 /** True for loopback binds, where first-user setup needs no token. */
@@ -97,6 +117,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       url: parsed.LE_REACHER_URL,
       secret: parsed.LE_REACHER_SECRET ?? null,
       domainIntervalMs: parsed.LE_REACHER_DOMAIN_INTERVAL_MS,
+    },
+    collector: {
+      publicUrl: (
+        parsed.LE_COLLECTOR_URL ??
+        `http://${parsed.LE_HOST === '0.0.0.0' ? '127.0.0.1' : parsed.LE_HOST}:${parsed.LE_COLLECTOR_PORT}`
+      ).replace(/\/+$/, ''),
+      clientIpHeader: parsed.LE_CLIENT_IP_HEADER.toLowerCase(),
+      geoDir: path.resolve(
+        parsed.LE_GEO_DIR ?? path.join(path.dirname(path.resolve(parsed.LE_DB_PATH)), 'geo'),
+      ),
+      geoDownload: parsed.LE_GEO_DOWNLOAD === 'on',
+      ipinfoToken: parsed.LE_IPINFO_TOKEN ?? null,
     },
   };
 }

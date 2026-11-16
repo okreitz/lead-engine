@@ -12,6 +12,12 @@ aws4fetch (https://github.com/mhart/aws4fetch)
 yauzl (https://github.com/thejoshwolfe/yauzl)
   MIT License, Copyright (c) 2014 Josh Wolfe. Used as a dependency to read ZIP datasets.
 
+node-maxmind (https://github.com/runk/node-maxmind) and mmdb-lib
+  MIT License, Copyright (c) Dmitry Shirokov. Used as a dependency to read .mmdb files.
+
+isbot (https://github.com/omrilotan/isbot)
+  The Unlicense (public domain). Used as a dependency to recognise bot user agents.
+
 shadcn/ui (https://github.com/shadcn-ui/ui)
   MIT License, Copyright (c) 2023 shadcn
   Used in: apps/web/src/components/ui/ (button, input, card, dialog; adapted) and the theme tokens in
