@@ -6,7 +6,9 @@ import {
   deleteWorkspaceBodySchema,
   KEYED_PROVIDERS,
   providerKeyBodySchema,
+  LOGO_MAX_BYTES,
   updateWorkspaceBodySchema,
+  workspaceLogoBodySchema,
 } from '@le/shared';
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
@@ -22,6 +24,7 @@ import {
   memberships,
   providerKeys,
   users,
+  workspaceLogos,
   workspaces,
   type WorkspaceSettings,
 } from '../../db/schema.ts';
@@ -32,6 +35,23 @@ import type { AppContext } from '../context.ts';
 import { HttpError, parse, sessionOf, workspaceOf } from '../http.ts';
 
 const providerParam = z.object({ provider: z.enum(KEYED_PROVIDERS) });
+
+/** The image type from the file's first bytes, or null when it is not PNG, JPEG or WebP. */
+export function sniffImageType(buf: Buffer): 'image/png' | 'image/jpeg' | 'image/webp' | null {
+  if (
+    buf.length >= 8 &&
+    buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  )
+    return 'image/png';
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  if (
+    buf.length >= 12 &&
+    buf.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    buf.subarray(8, 12).toString('latin1') === 'WEBP'
+  )
+    return 'image/webp';
+  return null;
+}
 
 export function registerWorkspaceRoutes(app: FastifyInstance, ctx: AppContext): void {
   app.post('/api/v1/workspaces', { config: { noWorkspace: true } }, async (request, reply) => {
@@ -114,6 +134,82 @@ export function registerWorkspaceRoutes(app: FastifyInstance, ctx: AppContext): 
       now,
     );
     return getWorkspace(ctx.db, workspaceId);
+  });
+
+  // ---- logo (sidebar branding)
+  app.get('/api/v1/workspace/logo', async (request, reply) => {
+    const { workspaceId } = workspaceOf(request);
+    const logo = ctx.db
+      .select()
+      .from(workspaceLogos)
+      .where(eq(workspaceLogos.workspaceId, workspaceId))
+      .get();
+    if (!logo) throw new HttpError(404, 'not_found');
+    return (
+      reply
+        .header('content-type', logo.contentType)
+        .header('x-content-type-options', 'nosniff')
+        .header('content-security-policy', "default-src 'none'")
+        // The URL carries ?v=<updatedAt>, so a new upload is a new URL.
+        .header('cache-control', 'private, max-age=31536000, immutable')
+        .send(logo.data)
+    );
+  });
+
+  app.put('/api/v1/workspace/logo', { config: { owner: true } }, async (request) => {
+    const auth = sessionOf(request);
+    const workspaceId = auth.workspaceId!;
+    const { dataUrl } = parse(workspaceLogoBodySchema, request.body);
+    const [header, b64] = dataUrl.split(',', 2) as [string, string];
+    const declared = header.slice('data:'.length, header.indexOf(';'));
+    const data = Buffer.from(b64, 'base64');
+    if (data.length > LOGO_MAX_BYTES)
+      throw new HttpError(
+        400,
+        'logo_too_large',
+        `the logo must be at most ${LOGO_MAX_BYTES / 1024} kB`,
+      );
+    const sniffed = sniffImageType(data);
+    if (!sniffed || sniffed !== declared)
+      throw new HttpError(400, 'logo_invalid', 'the file is not a valid PNG, JPEG or WebP image');
+    const now = ctx.now();
+    ctx.db
+      .insert(workspaceLogos)
+      .values({ workspaceId, contentType: sniffed, data, updatedAt: now })
+      .onConflictDoUpdate({
+        target: workspaceLogos.workspaceId,
+        set: { contentType: sniffed, data, updatedAt: now },
+      })
+      .run();
+    audit(
+      ctx.db,
+      {
+        workspaceId,
+        userId: auth.userId,
+        action: 'workspace.logo_update',
+        target: `workspace:${workspaceId}`,
+        details: { contentType: sniffed, bytes: data.length },
+      },
+      now,
+    );
+    return { logoUpdatedAt: now };
+  });
+
+  app.delete('/api/v1/workspace/logo', { config: { owner: true } }, async (request) => {
+    const auth = sessionOf(request);
+    const workspaceId = auth.workspaceId!;
+    ctx.db.delete(workspaceLogos).where(eq(workspaceLogos.workspaceId, workspaceId)).run();
+    audit(
+      ctx.db,
+      {
+        workspaceId,
+        userId: auth.userId,
+        action: 'workspace.logo_remove',
+        target: `workspace:${workspaceId}`,
+      },
+      ctx.now(),
+    );
+    return { ok: true };
   });
 
   // Destructive: the caller must type the workspace's exact name (CLAUDE.md).

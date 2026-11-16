@@ -7,6 +7,7 @@ import { KeyHelp } from '@/components/blocks/key-help';
 import { ConfirmButton } from '@/components/confirm';
 import { BudgetSettings } from '@/components/settings/budget-settings';
 import { CompanyData } from '@/components/settings/company-data';
+import { LogoSettings } from '@/components/settings/logo-settings';
 import { SitesSettings } from '@/components/settings/sites';
 import { SuppressionList } from '@/components/settings/suppression-list';
 import { Button } from '@/components/ui/button';
@@ -78,6 +79,7 @@ function SettingsTabs() {
       {tab === 'general' ? (
         <>
           <WorkspaceForm disabled={!owner} />
+          <LogoSettings disabled={!owner} />
           <Password />
         </>
       ) : null}

@@ -17,7 +17,7 @@ import {
   setSessionWorkspace,
 } from '../../auth/sessions.ts';
 import { isLoopback } from '../../config.ts';
-import { memberships, sessions, users, workspaces } from '../../db/schema.ts';
+import { memberships, sessions, users, workspaceLogos, workspaces } from '../../db/schema.ts';
 import { newId } from '../../ids.ts';
 import { createWorkspace } from '../../workspaces.ts';
 import type { AppContext } from '../context.ts';
@@ -185,11 +185,18 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
     const workspace = auth.workspaceId
       ? ctx.db.select().from(workspaces).where(eq(workspaces.id, auth.workspaceId)).get()
       : null;
+    const logo = workspace
+      ? ctx.db
+          .select({ updatedAt: workspaceLogos.updatedAt })
+          .from(workspaceLogos)
+          .where(eq(workspaceLogos.workspaceId, workspace.id))
+          .get()
+      : undefined;
     return {
       user: { id: auth.userId, email: auth.email },
       csrfToken: auth.csrfToken,
       role: auth.role,
-      workspace: workspace ?? null,
+      workspace: workspace ? { ...workspace, logoUpdatedAt: logo?.updatedAt ?? null } : null,
       workspaces: workspacesOfUser(ctx, auth.userId),
     };
   });

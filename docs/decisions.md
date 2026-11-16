@@ -243,3 +243,6 @@ The warm-up now writes an approved offer into the throwaway database, turns the 
 
 ## 2026-11-16: The Anthropic API is the default LLM adapter
 The first real offer draft on the VPS failed with "claude CLI returned no JSON (exit -1)". A workspace with no saved setting fell back to the `claude` CLI unless the instance had `ANTHROPIC_API_KEY`, ignoring the workspace's own key, and the CLI isn't in the Docker image. The settings page already showed the API as the default. Now an unsaved setting means the API; the CLI is chosen only explicitly (local mode), and a CLI that can't start says to switch adapters.
+
+## 2026-11-16: Workspace logo in its own table, PNG/JPEG/WebP only
+Each workspace can upload a sidebar logo (Settings → General). The bytes live in `workspace_logos`, not `workspaces`, so they never load with the workspace row; `/auth/me` only reports `logoUpdatedAt`, which the image URL uses as its cache key. SVG is refused because it can carry script; the type is checked by magic bytes and served with `nosniff` and `default-src 'none'`.

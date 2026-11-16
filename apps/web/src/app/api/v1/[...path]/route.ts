@@ -17,7 +17,13 @@ const FORWARD_REQUEST = [
   'x-csrf-token',
   'user-agent',
 ];
-const FORWARD_RESPONSE = ['content-type', 'content-disposition', 'cache-control'];
+const FORWARD_RESPONSE = [
+  'content-type',
+  'content-disposition',
+  'cache-control',
+  'x-content-type-options',
+  'content-security-policy',
+];
 
 async function proxy(request: NextRequest, ctx: { params: Promise<{ path: string[] }> }) {
   const { path } = await ctx.params;
