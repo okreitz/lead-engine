@@ -12,6 +12,7 @@
 //   whose key fetched it, and form fills belong to the workspace's own sites. Daily dropped-traffic
 //   counters (`visit_daily`) and daily session salts (`daily_salts`) are added for stream 1.
 import {
+  blob,
   index,
   integer,
   primaryKey,
@@ -52,6 +53,19 @@ export const workspaces = sqliteTable('workspaces', {
   timezone: text('timezone').notNull().default('America/New_York'),
   settings: json<WorkspaceSettings>('settings').notNull().default({}),
   createdAt: ts('created_at').notNull(),
+});
+
+/**
+ * A workspace's logo for the sidebar (Settings → General). Kept out of `workspaces` so the
+ * bytes are never loaded with the workspace row. PNG, JPEG or WebP only, checked by magic bytes.
+ */
+export const workspaceLogos = sqliteTable('workspace_logos', {
+  workspaceId: text('workspace_id')
+    .primaryKey()
+    .references(() => workspaces.id, { onDelete: 'cascade' }),
+  contentType: text('content_type').notNull(),
+  data: blob('data', { mode: 'buffer' }).notNull(),
+  updatedAt: ts('updated_at').notNull(),
 });
 
 export const users = sqliteTable('users', {

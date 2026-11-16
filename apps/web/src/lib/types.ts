@@ -13,6 +13,8 @@ export interface Workspace {
     subCaps?: Record<string, number>;
     enforceSubCaps?: boolean;
   };
+  /** Set when the workspace has a logo; also its cache-busting version. */
+  logoUpdatedAt?: number | null;
 }
 
 export interface Me {

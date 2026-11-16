@@ -73,4 +73,21 @@ export const createTokenBodySchema = z
   .object({ name: z.string().trim().min(1).max(80), scope: z.enum(['read', 'write']) })
   .strict();
 
+/** Largest workspace logo accepted, decoded. A sidebar logo needs a few kB. */
+export const LOGO_MAX_BYTES = 256 * 1024;
+export const LOGO_CONTENT_TYPES = ['image/png', 'image/jpeg', 'image/webp'] as const;
+
+/** Logo upload: a base64 data URL (PNG, JPEG or WebP; SVG is refused because it can carry script). */
+export const workspaceLogoBodySchema = z
+  .object({
+    dataUrl: z
+      .string()
+      .max(Math.ceil((LOGO_MAX_BYTES * 4) / 3) + 64)
+      .regex(
+        /^data:image\/(png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/,
+        'use a PNG, JPEG or WebP image',
+      ),
+  })
+  .strict();
+
 export const providerKeyBodySchema = z.object({ key: z.string().trim().min(8).max(512) }).strict();

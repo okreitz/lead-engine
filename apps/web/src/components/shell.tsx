@@ -25,6 +25,7 @@ import { ShortcutSheet } from '@/components/shortcut-sheet';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { TooltipProvider } from '@/components/ui/tooltip';
+import { WorkspaceLogo } from '@/components/workspace-logo';
 import { api, errorMessage } from '@/lib/api';
 import { GO_TO, isTyping } from '@/lib/keys';
 import { useMe } from '@/lib/me';
@@ -211,7 +212,8 @@ function ShellInner({ children }: { children: ReactNode }) {
           collapsed ? 'w-14' : 'w-60',
         )}
       >
-        <div className="flex items-center gap-2">
+        <div className={cn('flex items-center gap-2', collapsed && 'flex-col')}>
+          <WorkspaceLogo className={collapsed ? 'h-7 max-w-8' : 'h-7 max-w-16'} />
           {!collapsed ? (
             data.workspaces.length > 1 ? (
               <select
@@ -229,7 +231,8 @@ function ShellInner({ children }: { children: ReactNode }) {
               </select>
             ) : (
               <span className="min-w-0 flex-1 truncate px-1 text-sm font-semibold">
-                ◆ {data.workspace?.name ?? 'Lead Engine'}
+                {data.workspace?.logoUpdatedAt ? '' : '◆ '}
+                {data.workspace?.name ?? 'Lead Engine'}
               </span>
             )
           ) : null}
