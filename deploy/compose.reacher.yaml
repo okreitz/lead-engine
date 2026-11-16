@@ -1,0 +1,24 @@
+# Optional Reacher email verifier, kept out of deploy/compose.yaml on purpose: Coolify builds
+# every service in the main compose file, and this image bundles Chromium. Run it only after the
+# VPS port 25 test passes, as its own Coolify resource (or `docker compose -f deploy/compose.yaml
+# -f deploy/compose.reacher.yaml up` locally) on the same Docker network as the engine.
+services:
+  # Optional email verifier (SPEC §5.1 step 6). MIT since v0.11.9; `latest` is still the
+  # pre-MIT v0.11.8, so the tag is pinned. The image bundles Chromium (used only for some
+  # headless provider checks), which is why it is opt-in and never part of the default stack.
+  reacher:
+    image: reacherhq/backend:v0.11.11
+    restart: unless-stopped
+    environment:
+      RCH__HTTP_HOST: 0.0.0.0
+      RCH__HTTP_PORT: '8080'
+      RCH__HEADER_SECRET: ${LE_REACHER_SECRET:-}
+      # Must match the VPS reverse DNS; a real mailbox domain you control.
+      RCH__HELLO_NAME: ${RCH_HELLO_NAME:-localhost}
+      RCH__FROM_EMAIL: ${RCH_FROM_EMAIL:-hello@localhost}
+      RCH__SMTP_TIMEOUT: '45'
+      RCH__THROTTLE__MAX_REQUESTS_PER_MINUTE: '10'
+      RCH__THROTTLE__MAX_REQUESTS_PER_DAY: '500'
+    expose:
+      - '8080'
+    mem_limit: 512m

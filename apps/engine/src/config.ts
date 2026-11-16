@@ -93,7 +93,10 @@ function decodeMasterKey(raw: string | undefined): Buffer | null {
  * default lands in the repo's gitignored `data/`. Docker sets an absolute path.
  */
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
-  const parsed = envSchema.parse(env);
+  // Compose passes unset optional variables as empty strings (`${VAR:-}`): treat them as unset.
+  const parsed = envSchema.parse(
+    Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined && v !== '')),
+  );
   return {
     host: parsed.LE_HOST,
     enginePort: parsed.LE_ENGINE_PORT,
