@@ -8,16 +8,22 @@
  * burst of collector page views), waits until idle, then samples the RSS of each process
  * tree. Exits 1 if the total is over the limit.
  *
+ * Stream 2: an approved offer is written into the throwaway database (no LLM draft), the
+ * scheduled polls are turned off (they would call HN and an LLM), and the engine's live Bluesky
+ * Jetstream connection must be open, reading real posts, while the idle RSS is sampled.
+ * `--no-bluesky` skips that part (e.g. offline).
+ *
  * The collector loads the real DB-IP Lite country and ASN databases, as on the VPS: they are
  * downloaded into the throwaway data folder, or copied from --geo-dir=<folder> if given.
  *
- *   pnpm rss [--no-build] [--idle-seconds=20] [--limit-mb=512] [--geo-dir=<folder>]
+ *   pnpm rss [--no-build] [--idle-seconds=20] [--limit-mb=512] [--geo-dir=<folder>] [--no-bluesky]
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, cpSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import { createRequire } from 'node:module';
 
 const root = path.resolve(import.meta.dirname, '..');
 const args = Object.fromEntries(
@@ -191,6 +197,79 @@ for (const p of [
 ])
   await fetch(`${base}/api/v1${p}`, { headers: { cookie } });
 
+// Stream 2: approve an offer so the engine opens its Bluesky Jetstream connection.
+let bluesky = null;
+if (!args['no-bluesky']) {
+  const Database = createRequire(path.join(root, 'apps/engine/package.json'))('better-sqlite3');
+  const db = new Database(path.join(dataDir, 'le.db'));
+  const ws = db.prepare('SELECT id FROM workspaces').get().id;
+  const now = Date.now();
+  const profile = {
+    name: 'RSS offer',
+    summary: 'A lightweight CRM for small agencies.',
+    valueProps: ['Simple'],
+    competitors: ['HubSpot', 'Salesforce'],
+    icp: {
+      industries: [],
+      naics: [],
+      employeeRange: '1-200',
+      revenueRange: null,
+      states: [],
+      techUses: [],
+      techAvoids: [],
+      mustHave: [],
+      exclude: [],
+    },
+    personas: [
+      {
+        title: 'Founder',
+        seniority: 'Owner',
+        department: 'Exec',
+        pains: ['cost'],
+        titleKeywords: [],
+      },
+    ],
+    intentPhrases: [
+      'crm alternative',
+      'hubspot alternative',
+      'salesforce alternative',
+      'crm recommendations',
+      'looking for a crm',
+      'which crm',
+    ].map((phrase) => ({ phrase, kind: 'seeking', negative: ['hiring'] })),
+  };
+  db.prepare(
+    `INSERT INTO offers (id, workspace_id, name, website_url, created_at, updated_at)
+     VALUES ('off_rss', ?, 'RSS offer', 'https://rss-example.com', ?, ?)`,
+  ).run(ws, now, now);
+  db.prepare(
+    `INSERT INTO offer_versions (id, offer_id, workspace_id, version, status, source, data, created_at, updated_at, approved_at)
+     VALUES ('ofv_rss', 'off_rss', ?, 1, 'approved', 'human', ?, ?, ?, ?)`,
+  ).run(ws, JSON.stringify(profile), now, now, now);
+  db.close();
+  for (const source of ['hn', 'stackexchange', 'github', 'reddit']) {
+    await fetch(`${base}/api/v1/conversations/sources/${source}`, {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ enabled: false }),
+    });
+  }
+  // The scheduler refreshes the Bluesky matchers every minute.
+  for (let i = 0; i < 90 && !bluesky?.connected; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const r = await fetch(`${base}/api/v1/conversations/sources`, { headers: { cookie } });
+    bluesky = (await r.json()).sources.find((x) => x.source === 'bluesky')?.live ?? null;
+  }
+  if (!bluesky?.connected) throw new Error('the Bluesky Jetstream connection did not open');
+  await new Promise((r) => setTimeout(r, 5000));
+  const r = await fetch(`${base}/api/v1/conversations/sources`, { headers: { cookie } });
+  bluesky = (await r.json()).sources.find((x) => x.source === 'bluesky')?.live;
+  if (!bluesky.events) throw new Error('Jetstream is connected but no posts arrived');
+  console.log(`Jetstream connected: ${bluesky.events} posts read so far`);
+  await fetch(`${base}/inbox`, { headers: { cookie } });
+  await fetch(`${base}/api/v1/inbox`, { headers: { cookie } });
+}
+
 console.log(`warm-up done; waiting ${idleSeconds}s for idle…`);
 await new Promise((r) => setTimeout(r, idleSeconds * 1000));
 
@@ -227,6 +306,17 @@ console.log('\nIdle RSS (peak of 5 samples):');
 console.log(`  engine (API + collector + jobs)  ${engineMb.toFixed(1)} MB`);
 console.log(`  web (Next.js standalone)         ${webMb.toFixed(1)} MB`);
 console.log(`  total                            ${total.toFixed(1)} MB  (limit ${limitMb} MB)`);
+if (bluesky) {
+  const r = await fetch(`${base}/api/v1/conversations/sources`, { headers: { cookie } });
+  const live = (await r.json()).sources.find((x) => x.source === 'bluesky')?.live;
+  console.log(
+    `  Bluesky Jetstream: ${live?.connected ? 'connected' : 'NOT connected'} while sampling, ${live?.events ?? 0} posts read, ${live?.matched ?? 0} matched`,
+  );
+  if (!live?.connected) {
+    console.error('FAIL: the Jetstream connection closed during the measurement');
+    process.exit(1);
+  }
+}
 if (total > limitMb) {
   console.error('FAIL: over the memory limit');
   process.exit(1);

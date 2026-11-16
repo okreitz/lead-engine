@@ -237,3 +237,6 @@ Excerpts (1,200 chars) have emails and phone numbers removed before storage or s
 
 ## 2026-11-16: Thread retention and feedback
 Unactioned threads (state `new` or `dismissed` without feedback) are deleted 90 days after posting, hourly. `X` dismisses with `not_relevant` feedback, `R` marks replied with `good` (unless set otherwise), and both are kept: the three newest of each verdict go into the scoring prompt as few-shot examples, inside an untrusted-data block. Self-promotion posts stay out of the Priority tab but appear in All.
+
+## 2026-11-16: `pnpm rss` with the Bluesky Jetstream open
+The warm-up now writes an approved offer into the throwaway database, turns the polled sources off (they would call HN and an LLM) and waits until the engine's Jetstream connection is reading real posts; the run fails if it closes while sampling. Linux container, Node 22, DB-IP databases downloaded by the engine: after 20 s idle, engine 199.6 MB + web 96.5 MB = **296.1 MB** (1,086 posts read); after 180 s idle, engine 164.9 MB + web 96.9 MB = **261.7 MB** (6,319 posts read). So Bluesky adds roughly 10–40 MB over Phase 3's 252.6 MB, and RSS doesn't grow over time.
