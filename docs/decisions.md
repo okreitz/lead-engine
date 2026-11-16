@@ -187,6 +187,12 @@ Olaf approved it for Phase 2. The waterfall is pattern → Reacher (flag) → SE
 `PROVIDER_HELP` in `packages/shared` holds, per key or setting, what it is for, its cost or free tier, a checked link to where it is created (or the vendor's docs page when there is no direct page, marked as such) and the minimum scope. Settings → Provider keys, Company data, job wait reasons and missing-key messages read it, and `pnpm docs:keys` writes the "Getting your keys" table in `docs/providers.md`; a test fails when the table is stale. External links open in a new tab with `rel="noopener noreferrer"`.
 
 
+## 2026-11-15: Reacher lives in its own compose file
+The first Phase 2 deploy failed on Coolify. The cause turned out to be config (next entry), but Coolify builds from `deploy/compose.yaml`, and an opt-in `profiles` service there can't be relied on to stay off either. So the Chromium-bundling Reacher image moved to `deploy/compose.reacher.yaml`, run only after the port 25 test. The deploy workflow now prints the last lines of Coolify's deployment log when a deploy fails.
+
+## 2026-11-15: Empty environment variables count as unset
+Compose passes unset optional variables as `${VAR:-}`, i.e. an empty string. An empty `LE_SEC_USER_AGENT` failed config validation, so the Phase 2 engine stopped at startup and the Coolify deploy failed (reproduced locally). `loadConfig` now drops empty values before validating; a test covers it. The same fix is in the Phase 3 branch.
+
 ## 2026-11-15: The collector reads the client IP from X-Real-Ip, and only from the proxy
 Coolify routes domains through Traefik. Traefik deletes every `X-Forwarded-*` and `X-Real-Ip` header a client sends (it trusts no upstream by default) and sets `X-Real-Ip` to the TCP peer it saw (`pkg/middlewares/forwardedheaders`, Traefik v3.6), so the value can't be spoofed and is a single address, unlike `X-Forwarded-For`. The collector reads it only when the request comes from a loopback or private address (the proxy on the Docker network); any other peer's socket address is used instead. `LE_CLIENT_IP_HEADER` changes the header name. A CDN in front (e.g. Cloudflare's orange cloud) would make every visitor look like the CDN, so the collector DNS record must be DNS-only.
 
@@ -210,9 +216,6 @@ A company match from ipapi.is maps the IPv4 /24 (IPv6 /48) around the visitor, n
 
 ## 2026-11-15: Visiting companies become US accounts; people jobs are capped
 A business IP located in the US is taken as a US company (`createAccount` with country US); an existing non-US company record is refused and counted `non_us`. A newly created account at or above the fit threshold queues `people.find` with emails when an offer is approved, the budget isn't reached, it has no contacts and no pending job, and fewer than 20 visit-triggered people jobs were queued in the last 24 hours.
-
-## 2026-11-15: Empty environment variables count as unset
-Compose passes an unset optional variable as an empty string (`${VAR:-}`), which failed validation for variables with a format (`LE_SEC_USER_AGENT`, `LE_COLLECTOR_URL`, `LE_IPINFO_TOKEN`) and stopped the engine at startup. `loadConfig` now drops empty values before parsing, so they fall back to their defaults.
 
 ## 2026-11-15: `pnpm rss` with stream 1
 The warm-up now loads the real DB-IP Lite databases (downloaded into the throwaway data folder, or `--geo-dir`), adds a site and sends 300 collector page views before idling. Linux container, Node 22: engine 121.2 MB + web 96.0 MB = **217.2 MB** with the databases already on disk, and engine 156.5 MB + web 96.1 MB = **252.6 MB** right after the engine downloaded and gunzipped them itself (the download leaves a higher RSS watermark until the next restart). The two .mmdb files are read into one Buffer each (~18 MB) and decoded lazily with a 2,000-record cache.

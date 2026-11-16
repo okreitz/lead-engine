@@ -85,7 +85,14 @@ jobs:
             echo "status: $status"
             case "$status" in
               finished) exit 0 ;;
-              failed|cancelled*|error) echo "::error::Coolify deployment $DEPLOYMENT ended as $status"; exit 1 ;;
+              failed|cancelled*|error)
+                echo "::error::Coolify deployment $DEPLOYMENT ended as $status"
+                echo "::group::Last lines of the Coolify deployment log"
+                curl -sS --max-time 30 -H "Authorization: Bearer $COOLIFY_TOKEN" "$base/deployments/$DEPLOYMENT" \
+                  | jq -r '(.logs // "[]") | (fromjson? // []) | map(select(.hidden != true) | .output) | .[-80:] | .[]' \
+                  || echo "(log not available: the token may lack read:sensitive)"
+                echo "::endgroup::"
+                exit 1 ;;
             esac
             sleep 10
           done

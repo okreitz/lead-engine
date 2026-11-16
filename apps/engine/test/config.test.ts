@@ -23,8 +23,21 @@ describe('loadConfig', () => {
   it('rejects an invalid port', () => {
     expect(() => loadConfig({ LE_COLLECTOR_PORT: '99999' })).toThrow();
   });
+  it('treats empty variables from compose as unset', () => {
+    // deploy/compose.yaml passes unset optional variables as `${VAR:-}`, i.e. ''.
+    const config = loadConfig({
+      LE_SEC_USER_AGENT: '',
+      LE_REACHER: '',
+      LE_REACHER_SECRET: '',
+      LE_HTTPX_BIN: '',
+      ANTHROPIC_API_KEY: '',
+      LE_MASTER_KEY: '',
+    });
+    expect(config.enginePort).toBe(4501);
+    expect(config.masterKey).toBeNull();
+  });
 
-  it('treats empty variables from compose (`${VAR:-}`) as unset', () => {
+  it('treats empty collector variables as unset', () => {
     const config = loadConfig({
       LE_SEC_USER_AGENT: '',
       LE_COLLECTOR_URL: '',
