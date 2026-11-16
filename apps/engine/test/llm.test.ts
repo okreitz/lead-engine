@@ -6,7 +6,7 @@ import { costLedger, providerCache, workspaces } from '../src/db/schema.ts';
 import { anthropicApiAdapter } from '../src/llm/anthropic-api.ts';
 import { claudeCliArgs, parseClaudeCliResult } from '../src/llm/claude-cli.ts';
 import { fakeLlm } from '../src/llm/fake.ts';
-import { LlmOutputError, parseLlmOutput, runLlm } from '../src/llm/index.ts';
+import { LlmOutputError, llmAdapterFor, parseLlmOutput, runLlm } from '../src/llm/index.ts';
 import { estimateCallUsd, priceOf } from '../src/llm/pricing.ts';
 import { buildPrompt, dataBlock, sanitizeData } from '../src/llm/prompt.ts';
 import { ProviderCallError } from '../src/providers/errors.ts';
@@ -283,5 +283,35 @@ describe('LLM output parsing and pricing', () => {
     expect(priceOf('haiku')).toEqual({ input: 0.1, output: 0.5 });
     expect(() => priceOf('gpt-x')).toThrow();
     expect(estimateCallUsd('claude-haiku-5-5', '', 'x'.repeat(3500), 1000)).toBeGreaterThan(0.0009);
+  });
+});
+
+describe('llmAdapterFor', () => {
+  function ctxWith(settings: Record<string, unknown>) {
+    const ctx = makeCtx();
+    ctx.db
+      .insert(workspaces)
+      .values({ id: 'ws_a', name: 'W', slug: 'w', settings, createdAt: 0 })
+      .run();
+    return ctx;
+  }
+
+  it('uses the Anthropic API when nothing is saved, even without an instance key', () => {
+    expect(llmAdapterFor(ctxWith({}), 'ws_a').name).toBe('anthropic-api');
+  });
+
+  it('uses the claude CLI only when a workspace chose it', () => {
+    expect(llmAdapterFor(ctxWith({ llmAdapter: 'claude-cli' }), 'ws_a').name).toBe('claude-cli');
+  });
+});
+
+describe('claude CLI that cannot start', () => {
+  it('says how to switch to the API instead of "no JSON"', () => {
+    expect(() =>
+      parseClaudeCliResult(
+        { exitCode: -1, stdout: '', stderr: '', timedOut: false } as never,
+        'haiku',
+      ),
+    ).toThrow(/Settings → General → LLM adapter/);
   });
 });
