@@ -7,3 +7,4 @@ export * from './universe.ts';
 export * from './persona.ts';
 export * from './provider-help.ts';
 export * from './visitors.ts';
+export * from './conversations.ts';

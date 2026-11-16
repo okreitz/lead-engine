@@ -2,7 +2,14 @@ import type { Stream } from '@le/shared';
 
 /** Typed paid operations (SPEC §4.3). */
 export type Operation =
-  'findEmail' | 'verifyEmail' | 'findPeople' | 'ipLookup' | 'serpSearch' | 'llm' | 'test';
+  | 'findEmail'
+  | 'verifyEmail'
+  | 'findPeople'
+  | 'ipLookup'
+  | 'serpSearch'
+  | 'threadSearch'
+  | 'llm'
+  | 'test';
 
 export interface Provenance {
   field: string;

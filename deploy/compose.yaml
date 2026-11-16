@@ -47,6 +47,9 @@ services:
       # Optional: IPinfo Lite (CC BY-SA) instead of DB-IP Lite. Downloaded at runtime into
       # /data/geo, never part of the image.
       LE_IPINFO_TOKEN: ${LE_IPINFO_TOKEN:-}
+      # Stream 2: the Bluesky Jetstream connection, open only while a workspace has an approved
+      # offer with Bluesky on. Empty means on; set "off" to never connect.
+      LE_BLUESKY: ${LE_BLUESKY:-}
     volumes:
       - le-data:/data
     expose:

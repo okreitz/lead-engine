@@ -1,10 +1,10 @@
-import { DEFAULT_FIT_THRESHOLD, QUALIFIED_STAGE_INDEX } from '@le/shared';
+import { DEFAULT_FIT_THRESHOLD, INBOX_MIN_INTENT, QUALIFIED_STAGE_INDEX } from '@le/shared';
 import { and, eq, gte, inArray, sql } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { domainNotSuppressed } from '../../crm/filters.ts';
 import { listAccounts } from '../../crm/accounts.ts';
 import type { Tx } from '../../db/client.ts';
-import { accounts, activities, companies, costLedger, deals, signals } from '../../db/schema.ts';
+import { accounts, activities, companies, costLedger, deals, threads } from '../../db/schema.ts';
 import { budgetStatus, monthStart } from '../../providers/budget.ts';
 import { stagesOf, getWorkspace } from '../../workspaces.ts';
 import type { AppContext } from '../context.ts';
@@ -115,17 +115,17 @@ export function summary(tx: Tx, workspaceId: string, now: number) {
       .innerJoin(companies, eq(companies.id, accounts.companyId))
       .where(and(eq(accounts.workspaceId, workspaceId), gte(accounts.createdAt, since), visible))
       .get()?.n ?? 0;
-  // Threads arrive with stream 2 (Phase 4); they are counted from conversation signals.
+  // Threads that entered the inbox this week (scored intent ≥ 2).
   const newThreads =
     tx
       .select({ n: sql<number>`count(*)` })
-      .from(signals)
+      .from(threads)
       .where(
         and(
-          eq(signals.workspaceId, workspaceId),
-          eq(signals.stream, 'conversations'),
-          eq(signals.kind, 'thread'),
-          gte(signals.occurredAt, since),
+          eq(threads.workspaceId, workspaceId),
+          eq(threads.scoreStatus, 'scored'),
+          gte(threads.intent, INBOX_MIN_INTENT),
+          gte(threads.createdAt, since),
         ),
       )
       .get()?.n ?? 0;

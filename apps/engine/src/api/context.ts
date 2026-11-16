@@ -1,4 +1,5 @@
 import type { GeoService } from '../collector/geo.ts';
+import type { BlueskyStatus } from '../conversations/sources/bluesky.ts';
 import type { Config } from '../config.ts';
 import type { Db } from '../db/client.ts';
 import type { Crawler } from '../crawler/crawler.ts';
@@ -26,4 +27,6 @@ export interface AppContext {
   sleep?: (ms: number) => Promise<void>;
   /** Country/ASN databases for the collector (status shown in Settings → Sites). */
   geo?: GeoService;
+  /** The Jetstream consumer, for its status in the inbox (stream 2). */
+  bluesky?: { status(): BlueskyStatus };
 }

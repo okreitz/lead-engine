@@ -1,0 +1,39 @@
+{
+  "total_count": 3,
+  "incomplete_results": false,
+  "items": [
+    {
+      "url": "https://api.github.com/repos/sample-org/templates/issues/95",
+      "repository_url": "https://api.github.com/repos/sample-org/templates",
+      "html_url": "https://github.com/sample-org/templates/issues/95",
+      "id": 1,
+      "number": 95,
+      "title": "Add an open-source CRM alternative as a template",
+      "user": { "login": "sample-maintainer", "type": "User" },
+      "state": "open",
+      "comments": 0,
+      "created_at": "2026-11-14T21:14:00Z",
+      "body": "**TLDR:** we need a CRM alternative to HubSpot for small teams."
+    },
+    {
+      "url": "https://api.github.com/repos/bot-org/job-watcher/issues/6",
+      "repository_url": "https://api.github.com/repos/bot-org/job-watcher",
+      "html_url": "https://github.com/bot-org/job-watcher/issues/6",
+      "title": "2026-11-15 CRM alternative report",
+      "user": { "login": "github-actions[bot]", "type": "Bot" },
+      "state": "open",
+      "comments": 0,
+      "created_at": "2026-11-15T17:51:26Z",
+      "body": "Automated report"
+    },
+    {
+      "html_url": "https://github.com/sample-org/app/pull/7",
+      "repository_url": "https://api.github.com/repos/sample-org/app",
+      "title": "CRM alternative PR",
+      "user": { "login": "dev", "type": "User" },
+      "created_at": "2026-11-15T10:00:00Z",
+      "pull_request": { "url": "x" },
+      "body": ""
+    }
+  ]
+}

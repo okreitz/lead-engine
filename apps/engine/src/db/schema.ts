@@ -5,7 +5,9 @@
 // - No `linkedinUrl` on Company or Contact: we never store LinkedIn-derived data (CLAUDE.md).
 // - Auth tables (`sessions`, `api_tokens`), the offer version table, the provider cache and
 //   free-quota counters are added; SPEC §3 doesn't list them but §4/§8/§10 need them.
-// - Thread arrives with stream 2 (Phase 4).
+// - Thread (stream 2) adds the matched phrase, a label, persona, self-promo flag, scoring status,
+//   snooze, the edited reply draft and the created account; `conversation_sources` keeps each
+//   source's schedule, cursor and last result per workspace, and `engine_state` the Bluesky cursor.
 // - IpCompany and IpLookupCache carry `workspaceId`: ipapi.is data is licensed to the workspace
 //   whose key fetched it, and form fills belong to the workspace's own sites. Daily dropped-traffic
 //   counters (`visit_daily`) and daily session salts (`daily_salts`) are added for stream 1.
@@ -37,6 +39,8 @@ export interface WorkspaceSettings {
   /** Which LLM adapter offer drafts and scoring use. */
   llmAdapter?: 'claude-cli' | 'anthropic-api' | 'fake';
   llmModel?: string;
+  /** Stream 2 (conversations) options. */
+  conversations?: { stackexchangeSites?: string[]; dailyScoringCap?: number };
 }
 
 export const workspaces = sqliteTable('workspaces', {
@@ -728,6 +732,104 @@ export const visitDaily = sqliteTable(
 export const dailySalts = sqliteTable('daily_salts', {
   day: text('day').primaryKey(),
   salt: text('salt').notNull(),
+});
+
+// ---------------------------------------------------------------- stream 2: conversations
+
+export const THREAD_SOURCE_IDS = ['hn', 'bluesky', 'stackexchange', 'github', 'reddit'] as const;
+
+/** What the LLM said the poster named (only when they named it) and the US company it matched. */
+export interface CompanyMention {
+  name: string;
+  domain: string | null;
+}
+
+/**
+ * A public thread where someone may be asking for what the workspace sells (SPEC §3 Thread).
+ * The thread is the lead: no identity resolution. For Reddit only URL, title and the search
+ * snippet are stored. `externalId` is the source's own id (HN objectID, at:// URI, …).
+ */
+export const threads = sqliteTable(
+  'threads',
+  {
+    id: text('id').primaryKey(),
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    source: text('source', { enum: THREAD_SOURCE_IDS }).notNull(),
+    externalId: text('external_id').notNull(),
+    url: text('url').notNull(),
+    title: text('title').notNull(),
+    excerpt: text('excerpt').notNull(),
+    author: text('author'),
+    postedAt: ts('posted_at').notNull(),
+    matchedPhrase: text('matched_phrase').notNull(),
+    phraseKind: text('phrase_kind').notNull(),
+    scoreStatus: text('score_status', { enum: ['pending', 'scored', 'failed', 'skipped'] })
+      .notNull()
+      .default('pending'),
+    intent: integer('intent'),
+    label: text('label'),
+    pain: text('pain'),
+    stage: text('stage'),
+    persona: text('persona'),
+    suggestedReply: text('suggested_reply'),
+    /** The person's edit of the suggested reply (never posted by the app). */
+    replyDraft: text('reply_draft'),
+    companyMentioned: json<CompanyMention>('company_mentioned'),
+    selfPromo: integer('self_promo', { mode: 'boolean' }).notNull().default(false),
+    scoreReason: text('score_reason'),
+    scoreError: text('score_error'),
+    scoredAt: ts('scored_at'),
+    state: text('state', { enum: ['new', 'replied', 'dismissed', 'converted'] })
+      .notNull()
+      .default('new'),
+    feedback: text('feedback', { enum: ['good', 'not_relevant'] }),
+    feedbackAt: ts('feedback_at'),
+    snoozedUntil: ts('snoozed_until'),
+    accountId: text('account_id').references(() => accounts.id, { onDelete: 'set null' }),
+    /** Source details shown in the UI (site, tags, repository); never personal data. */
+    meta: json<Record<string, unknown>>('meta').notNull().default({}),
+    createdAt: ts('created_at').notNull(),
+    updatedAt: ts('updated_at').notNull(),
+    expiresAt: ts('expires_at').notNull(),
+  },
+  (t) => [
+    uniqueIndex('threads_workspace_url_uq').on(t.workspaceId, t.url),
+    index('threads_inbox_idx').on(t.workspaceId, t.state, t.intent),
+    index('threads_score_idx').on(t.workspaceId, t.scoreStatus),
+    index('threads_external_idx').on(t.source, t.externalId),
+    index('threads_expires_idx').on(t.expiresAt),
+  ],
+);
+
+/** Schedule, cursor and last result of each source per workspace. */
+export const conversationSources = sqliteTable(
+  'conversation_sources',
+  {
+    workspaceId: text('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    source: text('source', { enum: THREAD_SOURCE_IDS }).notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+    cursor: json<Record<string, unknown>>('cursor').notNull().default({}),
+    lastRunAt: ts('last_run_at'),
+    nextRunAt: ts('next_run_at'),
+    lastStatus: text('last_status', { enum: ['ok', 'error', 'waiting'] }),
+    lastError: text('last_error'),
+    /** Items the last run saw, and how many became new threads. */
+    lastFound: integer('last_found'),
+    lastNew: integer('last_new'),
+    updatedAt: ts('updated_at').notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.source] })],
+);
+
+/** Small engine-wide values that must survive restarts (the Jetstream cursor). */
+export const engineState = sqliteTable('engine_state', {
+  key: text('key').primaryKey(),
+  value: json<unknown>('value').notNull(),
+  updatedAt: ts('updated_at').notNull(),
 });
 
 // ---------------------------------------------------------------- control
