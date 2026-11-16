@@ -30,7 +30,8 @@ services:
       # SEC EDGAR needs a declared contact User-Agent, e.g. "Lead Engine admin@yourdomain.com".
       LE_SEC_USER_AGENT: ${LE_SEC_USER_AGENT:-}
       # Email verification through the Reacher sidecar: off until the VPS port 25 test passes.
-      # To enable: LE_REACHER=on, a LE_REACHER_SECRET, and start with `--profile reacher`.
+      # To enable: LE_REACHER=on and a LE_REACHER_SECRET, and run deploy/compose.reacher.yaml next to
+      # this stack (see deploy/coolify.md). Reacher is never part of this file.
       LE_REACHER: ${LE_REACHER:-off}
       LE_REACHER_URL: http://reacher:8080
       LE_REACHER_SECRET: ${LE_REACHER_SECRET:-}
@@ -82,27 +83,6 @@ services:
       timeout: 5s
       start_period: 20s
       retries: 3
-
-  # Optional email verifier (SPEC §5.1 step 6). MIT since v0.11.9; `latest` is still the
-  # pre-MIT v0.11.8, so the tag is pinned. The image bundles Chromium (used only for some
-  # headless provider checks), which is why it is opt-in and never part of the default stack.
-  reacher:
-    image: reacherhq/backend:v0.11.11
-    profiles: ['reacher']
-    restart: unless-stopped
-    environment:
-      RCH__HTTP_HOST: 0.0.0.0
-      RCH__HTTP_PORT: '8080'
-      RCH__HEADER_SECRET: ${LE_REACHER_SECRET:-}
-      # Must match the VPS reverse DNS; a real mailbox domain you control.
-      RCH__HELLO_NAME: ${RCH_HELLO_NAME:-localhost}
-      RCH__FROM_EMAIL: ${RCH_FROM_EMAIL:-hello@localhost}
-      RCH__SMTP_TIMEOUT: '45'
-      RCH__THROTTLE__MAX_REQUESTS_PER_MINUTE: '10'
-      RCH__THROTTLE__MAX_REQUESTS_PER_DAY: '500'
-    expose:
-      - '8080'
-    mem_limit: 512m
 
 volumes:
   # SQLite database (WAL), dataset downloads (imports/) and later the .mmdb files.

@@ -186,3 +186,9 @@ Olaf approved it for Phase 2. The waterfall is pattern → Reacher (flag) → SE
 ## 2026-11-15: Provider key help has one source
 `PROVIDER_HELP` in `packages/shared` holds, per key or setting, what it is for, its cost or free tier, a checked link to where it is created (or the vendor's docs page when there is no direct page, marked as such) and the minimum scope. Settings → Provider keys, Company data, job wait reasons and missing-key messages read it, and `pnpm docs:keys` writes the "Getting your keys" table in `docs/providers.md`; a test fails when the table is stale. External links open in a new tab with `rel="noopener noreferrer"`.
 
+
+## 2026-11-15: Reacher lives in its own compose file
+The first Phase 2 deploy failed on Coolify. The cause turned out to be config (next entry), but Coolify builds from `deploy/compose.yaml`, and an opt-in `profiles` service there can't be relied on to stay off either. So the Chromium-bundling Reacher image moved to `deploy/compose.reacher.yaml`, run only after the port 25 test. The deploy workflow now prints the last lines of Coolify's deployment log when a deploy fails.
+
+## 2026-11-15: Empty environment variables count as unset
+Compose passes unset optional variables as `${VAR:-}`, i.e. an empty string. An empty `LE_SEC_USER_AGENT` failed config validation, so the Phase 2 engine stopped at startup and the Coolify deploy failed (reproduced locally). `loadConfig` now drops empty values before validating; a test covers it. The same fix is in the Phase 3 branch.
