@@ -288,7 +288,7 @@ export function rescoreAccount(
       if (!fit || f.score > fit.score)
         fit =
           offers.length > 1
-            ? { score: f.score, reasons: [`Best fit: ${o.name}`, ...f.reasons] }
+            ? { score: f.score, reasons: [`Best fit: "${o.name}"`, ...f.reasons] }
             : f;
     }
   }

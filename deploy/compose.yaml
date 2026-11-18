@@ -50,6 +50,8 @@ services:
       # Stream 2: the Bluesky Jetstream connection, open only while a workspace has an approved
       # offer with Bluesky on. Empty means on; set "off" to never connect.
       LE_BLUESKY: ${LE_BLUESKY:-}
+      # Most offers (funnels) per workspace, e.g. for a hosted plan. Empty = no limit.
+      LE_MAX_OFFERS: ${LE_MAX_OFFERS:-}
     volumes:
       - le-data:/data
     expose:

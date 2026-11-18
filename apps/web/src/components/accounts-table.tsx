@@ -11,6 +11,7 @@ import { Eye } from 'lucide-react';
 import { useEffect, useMemo, useRef } from 'react';
 import { ScoreCell } from '@/components/blocks/score';
 import { relTime, STREAM_LABEL, type AccountRow } from '@/lib/crm';
+import { useOffers } from '@/lib/offers';
 import { cn } from '@/lib/utils';
 
 const ROW_HEIGHT = 44;
@@ -44,6 +45,7 @@ export function AccountsTable({
   height?: string;
 }) {
   const now = Date.now();
+  const offers = useOffers();
   const columns = useMemo<ColumnDef<AccountRow>[]>(
     () => [
       {
@@ -99,6 +101,16 @@ export function AccountsTable({
       },
       { id: 'stage', size: 110, header: 'Stage', cell: ({ row }) => row.original.stage },
       {
+        id: 'offer',
+        size: 130,
+        header: 'Offer',
+        cell: ({ row }) => (
+          <span className="truncate" title={offers.name(row.original.offerId) ?? undefined}>
+            {offers.name(row.original.offerId) ?? <span className="text-muted-foreground">—</span>}
+          </span>
+        ),
+      },
+      {
         id: 'stream',
         size: 100,
         header: 'Stream',
@@ -143,15 +155,16 @@ export function AccountsTable({
       { id: 'size', size: 90, header: 'Size', cell: ({ row }) => row.original.sizeRange ?? '—' },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, selected],
+    [rows, selected, offers.all],
   );
 
   const columnVisibility = useMemo<VisibilityState>(() => {
     const v: VisibilityState = {};
     for (const c of ['priority', 'stage', 'stream', 'last', 'next', 'industry', 'state', 'size'])
       v[c] = visibleCols.includes(c);
+    v.offer = offers.multiple && visibleCols.includes('offer');
     return v;
-  }, [visibleCols]);
+  }, [visibleCols, offers.multiple]);
 
   // TanStack Table returns non-memoizable functions by design; the React Compiler lint knows.
   // eslint-disable-next-line react-hooks/incompatible-library

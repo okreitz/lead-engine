@@ -183,7 +183,7 @@ describe('accounts with several offers', () => {
     const id = created.body.id as string;
     const best = c.ctx.db.select().from(accounts).where(eq(accounts.id, id)).get()!;
     expect(best.offerId).toBeNull();
-    expect(best.scoreReasons?.fit[0]).toBe('Best fit: Consulting');
+    expect(best.scoreReasons?.fit[0]).toBe('Best fit: "Consulting"');
 
     // Filed under the product offer, the same company fits worse (software ICP).
     expect(

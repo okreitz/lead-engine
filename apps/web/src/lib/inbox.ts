@@ -20,6 +20,7 @@ export interface Thread {
   postedAt: number;
   matchedPhrase: string;
   phraseKind: string;
+  offerId: string | null;
   scoreStatus: 'pending' | 'scored' | 'failed' | 'skipped';
   intent: number | null;
   label: ThreadLabel | null;
@@ -76,9 +77,15 @@ export interface SourcesResponse {
   settings: { stackexchangeSites: string[] };
 }
 
-export function fetchInbox(tab: InboxTab, source: string | null, minIntent: number | null) {
+export function fetchInbox(
+  tab: InboxTab,
+  source: string | null,
+  minIntent: number | null,
+  offer: string | null = null,
+) {
   const p = new URLSearchParams({ tab });
   if (source) p.set('source', source);
+  if (offer) p.set('offer', offer);
   if (minIntent !== null) p.set('minIntent', String(minIntent));
   return api<InboxList>(`/inbox?${p.toString()}`);
 }

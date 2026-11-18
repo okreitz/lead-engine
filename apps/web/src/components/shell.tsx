@@ -71,6 +71,7 @@ function readSidebar(): boolean {
 interface TodayLite {
   budget: { budgetUsd: number; spentUsd: number; state: string };
   offer: { version: number } | null;
+  approvedOffers?: number;
   inbox: { counts: { priority: number } } | null;
 }
 
@@ -192,7 +193,12 @@ function ShellInner({ children }: { children: ReactNode }) {
       href: '/offer',
       label: 'Offer profile',
       icon: FileText,
-      badge: t?.offer ? `v${t.offer.version}` : 'draft',
+      badge:
+        (t?.approvedOffers ?? 0) > 1
+          ? `${t!.approvedOffers} offers`
+          : t?.offer
+            ? `v${t.offer.version}`
+            : 'draft',
     },
     {
       href: '/roi',

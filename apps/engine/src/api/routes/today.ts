@@ -11,6 +11,7 @@ import { domainNotSuppressed } from '../../crm/filters.ts';
 import { listContacts } from '../../crm/records.ts';
 import type { Tx } from '../../db/client.ts';
 import { accounts, companies, nextSteps, offers, offerVersions, signals } from '../../db/schema.ts';
+import { approvedOffers } from '../../offer/approved.ts';
 import { budgetStatus } from '../../providers/budget.ts';
 import type { AppContext } from '../context.ts';
 import { parse, workspaceOf } from '../http.ts';
@@ -129,6 +130,8 @@ export function today(tx: Tx, workspaceId: string, now: number) {
       share: budget.share,
     },
     offer: approved ?? null,
+    /** How many offers have an approved version (several offers run side by side). */
+    approvedOffers: approvedOffers(tx, workspaceId).length,
     accountCount,
     inbox: {
       counts: inboxCounts(tx, workspaceId, now),

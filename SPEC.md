@@ -96,7 +96,7 @@ Offer           { id, workspaceId, name, websiteUrl, summary, valueProps[], comp
 Company         { id, domain (unique), name, country, state?, city?, industry?, naics?, sizeRange?,
                   foundedYear?, linkedinUrl?, sources[], tech[], techCheckedAt?, updatedAt }
 
-// CRM
+// CRM (Account, Thread and Site also carry offerId?: the offer/funnel they belong to, §4.1)
 Account         { id, workspaceId, companyId, stage, ownerUserId?, fitScore?, intentScore, priority,
                   firstSource: 'visits'|'conversations'|'personas'|'manual', firstSourceAt,
                   status: 'active'|'suppressed'|'archived', createdAt, updatedAt }
@@ -138,6 +138,7 @@ AuditLog        { id, workspaceId?, userId?, action, target, at, details }
 2. The engine fetches the homepage, plus up to 5 linked pages (pricing, product, customers, about), as readable text.
 3. The LLM returns an `Offer` draft as schema-validated JSON: summary, ICP, personas, 20–40 intent phrases with negative keywords, and competitors.
 4. A human edits and approves it. Streams 2 and 3 only run on an approved offer version. Changing it creates a new version.
+5. **A workspace can have several offers** (one per business or funnel, e.g. a consulting site and two products), each with its own approved version. Every approved offer runs: stream 2 searches all their intent phrases (each phrase once) and files a thread under the offer whose phrase matched; a site, a Find run and an account each belong to one offer (`offerId`), and fit is scored against that offer's ICP. An account without an offer is scored against every approved offer and the best fit counts. `LE_MAX_OFFERS` caps offers per workspace (hosted plans); offers are deleted by typing their name.
 
 ### 4.2 Scoring
 - **Fit (0–100):** firmographic rules from the ICP (industry, size, state, tech), plus the LLM's homepage fit score with reasons. Recomputed when the offer version changes.
