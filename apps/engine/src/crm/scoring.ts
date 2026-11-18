@@ -8,10 +8,11 @@
  *   hiring 30 d half-lives), saturating so it is capped and normalised.
  * - Priority = w_fit·fit + w_intent·intent (workspace weights, default 0.6 / 0.4).
  */
-import { DEFAULT_SCORE_WEIGHTS, offerProfileSchema, type OfferProfile } from '@le/shared';
-import { and, desc, eq, isNotNull } from 'drizzle-orm';
+import { DEFAULT_SCORE_WEIGHTS, type OfferProfile } from '@le/shared';
+import { and, eq } from 'drizzle-orm';
 import type { Tx } from '../db/client.ts';
-import { accounts, companies, offerVersions, signals, workspaces } from '../db/schema.ts';
+import { accounts, companies, signals, workspaces } from '../db/schema.ts';
+import { approvedOffers, type ApprovedOffer } from '../offer/approved.ts';
 
 export type Icp = OfferProfile['icp'];
 
@@ -236,31 +237,37 @@ export function priorityScore(
   return Math.round(((weights.fit * (fit ?? 0) + weights.intent * intent) / sum) * 10) / 10;
 }
 
-/** ICP of the workspace's most recently approved offer version, or null. */
-export function activeIcp(tx: Tx, workspaceId: string): Icp | null {
-  const row = tx
-    .select({ data: offerVersions.data })
-    .from(offerVersions)
-    .where(
-      and(
-        eq(offerVersions.workspaceId, workspaceId),
-        eq(offerVersions.status, 'approved'),
-        isNotNull(offerVersions.approvedAt),
-      ),
+type FitSignal = { score: number; reasons: string[] } | null;
+
+/** The newest LLM fit for this offer (stream 3 writes `{ score, reasons, offerId }`). */
+function llmFitFor(sigs: (typeof signals.$inferSelect)[], offerId: string): FitSignal {
+  const s = sigs
+    .filter(
+      (x) =>
+        x.kind === 'fit' &&
+        typeof x.payload.score === 'number' &&
+        (x.payload.offerId === undefined || x.payload.offerId === offerId),
     )
-    .orderBy(desc(offerVersions.approvedAt))
-    .get();
-  const parsed = offerProfileSchema.safeParse(row?.data);
-  return parsed.success ? parsed.data.icp : null;
+    .sort((a, b) => b.occurredAt - a.occurredAt)[0];
+  return s
+    ? {
+        score: s.payload.score as number,
+        reasons: (s.payload.reasons as string[] | undefined) ?? [],
+      }
+    : null;
 }
 
-/** Recomputes and stores an account's scores and reasons. */
+/**
+ * Recomputes and stores an account's scores and reasons. Fit uses the account's offer; an
+ * account without one is scored against every approved offer and the best fit counts.
+ * `offers` may be passed when rescoring many accounts.
+ */
 export function rescoreAccount(
   tx: Tx,
   workspaceId: string,
   accountId: string,
   now: number,
-  icp = activeIcp(tx, workspaceId),
+  offers: ApprovedOffer[] = approvedOffers(tx, workspaceId),
 ): void {
   const row = tx
     .select({ account: accounts, company: companies, settings: workspaces.settings })
@@ -271,22 +278,20 @@ export function rescoreAccount(
     .get();
   if (!row) return;
   const sigs = tx.select().from(signals).where(eq(signals.accountId, accountId)).all();
-  // The newest LLM fit signal (stream 3 writes `{ score, reasons }`).
-  const llmFit = sigs
-    .filter((s) => s.kind === 'fit' && typeof s.payload.score === 'number')
-    .sort((a, b) => b.occurredAt - a.occurredAt)[0];
-  const fit = icp
-    ? fitScore(
-        row.company,
-        icp,
-        llmFit
-          ? {
-              score: llmFit.payload.score as number,
-              reasons: (llmFit.payload.reasons as string[] | undefined) ?? [],
-            }
-          : null,
-      )
-    : null;
+  const own = row.account.offerId ? offers.find((o) => o.offerId === row.account.offerId) : null;
+  let fit: { score: number; reasons: string[] } | null = null;
+  if (own) {
+    fit = fitScore(row.company, own.profile.icp, llmFitFor(sigs, own.offerId));
+  } else {
+    for (const o of offers) {
+      const f = fitScore(row.company, o.profile.icp, llmFitFor(sigs, o.offerId));
+      if (!fit || f.score > fit.score)
+        fit =
+          offers.length > 1
+            ? { score: f.score, reasons: [`Best fit: ${o.name}`, ...f.reasons] }
+            : f;
+    }
+  }
   const intent = intentScore(sigs, now);
   const priority = priorityScore(fit?.score ?? null, intent.score, row.settings.scoreWeights);
   tx.update(accounts)
@@ -305,12 +310,12 @@ export function rescoreAccount(
 }
 
 export function rescoreWorkspace(tx: Tx, workspaceId: string, now: number): number {
-  const icp = activeIcp(tx, workspaceId);
+  const offers = approvedOffers(tx, workspaceId);
   const ids = tx
     .select({ id: accounts.id })
     .from(accounts)
     .where(eq(accounts.workspaceId, workspaceId))
     .all();
-  for (const { id } of ids) rescoreAccount(tx, workspaceId, id, now, icp);
+  for (const { id } of ids) rescoreAccount(tx, workspaceId, id, now, offers);
   return ids.length;
 }

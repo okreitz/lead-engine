@@ -69,9 +69,11 @@ export interface CompiledPhrase {
   negatives: string[][];
   /** Prefix of the longest word, for a cheap substring pre-check on the firehose. */
   probe: string;
+  /** The offer this phrase belongs to (workspaces can have several offers). */
+  offerId?: string;
 }
 
-export function compilePhrases(phrases: IntentPhrase[]): CompiledPhrase[] {
+export function compilePhrases(phrases: IntentPhrase[], offerId?: string): CompiledPhrase[] {
   const out: CompiledPhrase[] = [];
   for (const p of phrases) {
     const all = tokenize(p.phrase);
@@ -90,6 +92,7 @@ export function compilePhrases(phrases: IntentPhrase[]): CompiledPhrase[] {
       negatives: p.negative.map(tokenize).filter((n) => n.length),
       // A prefix survives plurals ("companies" / "company"), so the pre-check never misses.
       probe: probe.slice(0, Math.max(3, probe.length - 3)),
+      ...(offerId ? { offerId } : {}),
     });
   }
   return out;
@@ -134,6 +137,33 @@ export interface PhraseMatch {
   phrase: string;
   kind: IntentPhrase['kind'];
   exact: boolean;
+  offerId?: string;
+}
+
+/** Every approved offer's phrases, each tagged with its offer (prefilter for all offers). */
+export function compileOffers(
+  offers: { offerId: string; profile: Pick<OfferProfile, 'intentPhrases'> }[],
+): CompiledPhrase[] {
+  return offers.flatMap((o) => compilePhrases(o.profile.intentPhrases, o.offerId));
+}
+
+/**
+ * The search queries for all offers: each phrase once (case-insensitive), in offer order, so
+ * an offer's phrases keep their place and sources don't search the same text twice.
+ */
+export function unionPhrases(
+  offers: { profile: Pick<OfferProfile, 'intentPhrases'> }[],
+): IntentPhrase[] {
+  const seen = new Set<string>();
+  const out: IntentPhrase[] = [];
+  for (const o of offers)
+    for (const p of o.profile.intentPhrases) {
+      const key = p.phrase.trim().toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(p);
+    }
+  return out;
 }
 
 /**
@@ -149,17 +179,24 @@ export function matchText(
   if (!candidates.length) return null;
   const tokens = tokenize(text);
   let best: (PhraseMatch & { span: number }) | null = null;
+  const tag = (c: CompiledPhrase) => (c.offerId ? { offerId: c.offerId } : {});
   for (const c of candidates) {
     if (c.negatives.some((n) => containsSeq(tokens, n))) continue;
     if (containsSeq(tokens, c.all)) {
-      const m = { phrase: c.phrase, kind: c.kind, exact: true, span: 0 };
+      const m = { phrase: c.phrase, kind: c.kind, exact: true, span: 0, ...tag(c) };
       if (!best || !best.exact) best = m;
       continue;
     }
     const span = minWindow(tokens, c.words);
     if (span <= Math.max(6, c.words.length * 3) && (!best || (!best.exact && span < best.span))) {
-      best = { phrase: c.phrase, kind: c.kind, exact: false, span };
+      best = { phrase: c.phrase, kind: c.kind, exact: false, span, ...tag(c) };
     }
   }
-  return best ? { phrase: best.phrase, kind: best.kind, exact: best.exact } : null;
+  if (!best) return null;
+  return {
+    phrase: best.phrase,
+    kind: best.kind,
+    exact: best.exact,
+    ...(best.offerId ? { offerId: best.offerId } : {}),
+  };
 }

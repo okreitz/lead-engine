@@ -105,6 +105,9 @@ export const createOfferBodySchema = z
   })
   .strict();
 
+/** Deleting an offer requires typing its exact name (CLAUDE.md: destructive actions). */
+export const deleteOfferBodySchema = z.object({ confirmName: z.string() }).strict();
+
 export const saveOfferVersionBodySchema = z
   .object({ data: offerProfileSchema, review: reviewSchema.optional() })
   .strict();

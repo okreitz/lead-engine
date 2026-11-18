@@ -14,13 +14,13 @@ import { findAccount } from '../crm/accounts.ts';
 import { createContact, CrmErrorGuard } from './contacts.ts';
 import { rescoreAccount } from '../crm/scoring.ts';
 import type { Tx } from '../db/client.ts';
-import { companies, contacts, fieldSources, signals, workspaces } from '../db/schema.ts';
+import { accounts, companies, contacts, fieldSources, signals, workspaces } from '../db/schema.ts';
 import { newId } from '../ids.ts';
 import { ContinueJob, enqueue, PermanentJobError, type JobHandler } from '../jobs/queue.ts';
 import { llmAdapterFor, runLlm } from '../llm/index.ts';
 import { estimateCallUsd } from '../llm/pricing.ts';
 import { UNTRUSTED_RULES } from '../llm/prompt.ts';
-import { approvedOffer } from '../persona/run.ts';
+import { offerFor } from '../offer/approved.ts';
 import { budgetStatus } from '../providers/budget.ts';
 import { ICYPEAS_CREDIT_USD, SEARCH_CREDITS, VERIFY_CREDITS } from '../providers/icypeas.ts';
 import { ProviderAuthError, ProviderCallError } from '../providers/errors.ts';
@@ -131,7 +131,12 @@ export function emailTargets(
 }
 
 export function estimates(ctx: AppContext, workspaceId: string, accountId: string) {
-  const offer = approvedOffer(ctx.db, workspaceId);
+  const acc = ctx.db
+    .select({ offerId: accounts.offerId })
+    .from(accounts)
+    .where(eq(accounts.id, accountId))
+    .get();
+  const offer = offerFor(ctx.db, workspaceId, acc?.offerId);
   const budget = budgetStatus(ctx.db, workspaceId, ctx.now());
   const people = offer ? peopleEstimateUsd(ctx, workspaceId, offer.profile) : null;
   const per = emailPerContactUsd(ctx, workspaceId);
@@ -188,7 +193,8 @@ export function peopleFindHandler(getCrawler: () => Crawler): JobHandler {
     const row = findAccount(ctx.db, job.workspaceId, accountId);
     if (!row) throw new PermanentJobError('account not found');
     const { company } = row;
-    const offer = approvedOffer(ctx.db, job.workspaceId);
+    // People are matched to the personas of the account's offer.
+    const offer = offerFor(ctx.db, job.workspaceId, row.account.offerId);
     if (!offer) throw new PermanentJobError('approve an offer profile first');
     const crawler = getCrawler();
     const http = ctx.http ?? defaultHttp;

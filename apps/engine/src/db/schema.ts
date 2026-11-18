@@ -248,6 +248,12 @@ export const accounts = sqliteTable(
       .references(() => companies.id),
     stage: text('stage').notNull(),
     ownerUserId: text('owner_user_id').references(() => users.id, { onDelete: 'set null' }),
+    /**
+     * The offer (funnel) this account belongs to: set by the stream that created it (the
+     * persona run's offer, the site's offer, the thread's offer) or by hand. Fit is scored
+     * against this offer's ICP; null = scored against every approved offer, best one wins.
+     */
+    offerId: text('offer_id').references(() => offers.id, { onDelete: 'set null' }),
     fitScore: real('fit_score'),
     intentScore: real('intent_score').notNull().default(0),
     priority: real('priority').notNull().default(0),
@@ -265,6 +271,7 @@ export const accounts = sqliteTable(
   },
   (t) => [
     uniqueIndex('accounts_workspace_company_uq').on(t.workspaceId, t.companyId),
+    index('accounts_workspace_offer_idx').on(t.workspaceId, t.offerId),
     index('accounts_workspace_priority_idx').on(t.workspaceId, t.priority),
   ],
 );
@@ -464,6 +471,8 @@ export interface ImportFilter {
   employeeRange: string | null;
   states: string[];
   exclude: string[];
+  /** Several offers: a row is kept when it passes any of these (the fields above are empty). */
+  anyOf?: ImportFilter[];
 }
 
 /**
@@ -612,6 +621,8 @@ export const sites = sqliteTable(
       .notNull()
       .references(() => workspaces.id, { onDelete: 'cascade' }),
     domain: text('domain').notNull(),
+    /** The offer this site's visitors are scored and filed under (null = every offer). */
+    offerId: text('offer_id').references(() => offers.id, { onDelete: 'set null' }),
     siteKey: text('site_key').notNull().unique(),
     intentPages: json<IntentPage[]>('intent_pages').notNull().default([]),
     /** Last event the collector accepted for this site (install check). */
@@ -779,6 +790,8 @@ export const threads = sqliteTable(
     postedAt: ts('posted_at').notNull(),
     matchedPhrase: text('matched_phrase').notNull(),
     phraseKind: text('phrase_kind').notNull(),
+    /** The offer whose intent phrase matched; the thread is scored against that offer. */
+    offerId: text('offer_id').references(() => offers.id, { onDelete: 'set null' }),
     scoreStatus: text('score_status', { enum: ['pending', 'scored', 'failed', 'skipped'] })
       .notNull()
       .default('pending'),
@@ -812,6 +825,7 @@ export const threads = sqliteTable(
     uniqueIndex('threads_workspace_url_uq').on(t.workspaceId, t.url),
     index('threads_inbox_idx').on(t.workspaceId, t.state, t.intent),
     index('threads_score_idx').on(t.workspaceId, t.scoreStatus),
+    index('threads_workspace_offer_idx').on(t.workspaceId, t.offerId),
     index('threads_external_idx').on(t.source, t.externalId),
     index('threads_expires_idx').on(t.expiresAt),
   ],

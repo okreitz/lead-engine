@@ -13,6 +13,7 @@ import {
   listSites,
   markWrongCompany,
   requireSite,
+  requireWorkspaceOffer,
   siteView,
   visitorsReport,
 } from '../../visits/report.ts';
@@ -41,7 +42,7 @@ export function registerVisitorRoutes(app: FastifyInstance, ctx: AppContext): vo
   app.post('/api/v1/sites', { config: { owner: true } }, async (request, reply) => {
     const { workspaceId, userId } = workspaceOf(request);
     const body = parse(siteCreateSchema, request.body);
-    const site = await guard(() => createSite(ctx, workspaceId, body.domain));
+    const site = await guard(() => createSite(ctx, workspaceId, body.domain, body.offerId));
     audit(ctx.db, { workspaceId, userId, action: 'site.create', target: site.domain }, ctx.now());
     return reply.code(201).send(siteView(ctx, site));
   });
@@ -53,25 +54,37 @@ export function registerVisitorRoutes(app: FastifyInstance, ctx: AppContext): vo
       const { workspaceId, userId } = workspaceOf(request);
       const body = parse(siteUpdateSchema, request.body);
       const site = await guard(() => requireSite(ctx.db, workspaceId, request.params.id));
-      const seen = new Set<string>();
-      const intentPages = body.intentPages.filter((p) => {
-        const k = p.path.toLowerCase();
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
-      ctx.db.update(sites).set({ intentPages }).where(eq(sites.id, site.id)).run();
-      audit(
-        ctx.db,
-        {
-          workspaceId,
-          userId,
-          action: 'site.intent_pages',
-          target: site.domain,
-          details: { intentPages },
-        },
-        ctx.now(),
-      );
+      if (body.intentPages) {
+        const seen = new Set<string>();
+        const intentPages = body.intentPages.filter((p) => {
+          const k = p.path.toLowerCase();
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+        ctx.db.update(sites).set({ intentPages }).where(eq(sites.id, site.id)).run();
+        audit(
+          ctx.db,
+          {
+            workspaceId,
+            userId,
+            action: 'site.intent_pages',
+            target: site.domain,
+            details: { intentPages },
+          },
+          ctx.now(),
+        );
+      }
+      if (body.offerId !== undefined) {
+        const offerId = body.offerId;
+        if (offerId) await guard(() => requireWorkspaceOffer(ctx.db, workspaceId, offerId));
+        ctx.db.update(sites).set({ offerId }).where(eq(sites.id, site.id)).run();
+        audit(
+          ctx.db,
+          { workspaceId, userId, action: 'site.offer', target: site.domain, details: { offerId } },
+          ctx.now(),
+        );
+      }
       return siteView(ctx, requireSite(ctx.db, workspaceId, site.id));
     },
   );

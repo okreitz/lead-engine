@@ -123,6 +123,7 @@ export interface UniverseRow {
  * candidate filter and the fit score decide later). Returns the reason a row is dropped.
  */
 export function icpDropReason(row: UniverseRow, f: ImportFilter): string | null {
+  if (f.anyOf?.length) return f.anyOf.every((g) => icpDropReason(row, g)) ? 'icp' : null;
   if (f.exclude.length && overlaps(`${row.name} ${row.industry ?? ''}`, f.exclude)) return 'icp';
   if (f.industries.length && row.industry && !overlaps(row.industry, f.industries)) return 'icp';
   const want = parseRange(f.employeeRange);

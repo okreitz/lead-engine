@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, inArray, isNull, or, sql, type SQL } from 'drizzle-orm';
 import type { Tx } from '../db/client.ts';
 import {
   accounts,
@@ -106,12 +106,35 @@ export function workspaceRow(tx: Tx, workspaceId: string) {
   return ws;
 }
 
+/**
+ * The workspace's account for this company, if any. An account without an offer takes the
+ * offer of the stream that found it again; an account's offer is never replaced here.
+ */
+function findExisting(
+  tx: Tx,
+  workspaceId: string,
+  companyId: string,
+  offerId: string | null,
+  now: number,
+): string | null {
+  const row = tx
+    .select({ id: accounts.id, offerId: accounts.offerId })
+    .from(accounts)
+    .where(and(eq(accounts.workspaceId, workspaceId), eq(accounts.companyId, companyId)))
+    .get();
+  if (!row) return null;
+  if (offerId && !row.offerId)
+    tx.update(accounts).set({ offerId, updatedAt: now }).where(eq(accounts.id, row.id)).run();
+  return row.id;
+}
+
 export function createAccount(
   tx: Tx,
   workspaceId: string,
   input: CompanyInput & { stage?: string | undefined; ownerUserId?: string | null | undefined },
   firstSource: 'manual' | 'personas' | 'visits' | 'conversations',
   now: number,
+  offerId: string | null = null,
 ): { id: string; created: boolean } {
   const ws = workspaceRow(tx, workspaceId);
   requireUs(input.country, ws.allowedCountries);
@@ -119,12 +142,8 @@ export function createAccount(
   const stage = input.stage ?? stages[0]!;
   if (!stages.includes(stage)) throw new CrmError('invalid_stage', `unknown stage: ${stage}`);
   const companyId = upsertCompany(tx, input, firstSource, now);
-  const existing = tx
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(and(eq(accounts.workspaceId, workspaceId), eq(accounts.companyId, companyId)))
-    .get();
-  if (existing) return { id: existing.id, created: false };
+  const existing = findExisting(tx, workspaceId, companyId, offerId, now);
+  if (existing) return { id: existing, created: false };
   const id = newId('acc');
   tx.insert(accounts)
     .values({
@@ -133,6 +152,7 @@ export function createAccount(
       companyId,
       stage,
       ownerUserId: input.ownerUserId ?? null,
+      offerId,
       firstSource,
       firstSourceAt: now,
       status: 'active',
@@ -153,17 +173,14 @@ export function createAccountForCompany(
   companyId: string,
   firstSource: 'manual' | 'personas' | 'visits' | 'conversations',
   now: number,
+  offerId: string | null = null,
 ): { id: string; created: boolean } {
   const ws = workspaceRow(tx, workspaceId);
   const company = tx.select().from(companies).where(eq(companies.id, companyId)).get();
   if (!company) throw new CrmError('not_found', 'company not found', 404);
   requireUs(company.country, ws.allowedCountries);
-  const existing = tx
-    .select({ id: accounts.id })
-    .from(accounts)
-    .where(and(eq(accounts.workspaceId, workspaceId), eq(accounts.companyId, companyId)))
-    .get();
-  if (existing) return { id: existing.id, created: false };
+  const existing = findExisting(tx, workspaceId, companyId, offerId, now);
+  if (existing) return { id: existing, created: false };
   const id = newId('acc');
   tx.insert(accounts)
     .values({
@@ -171,6 +188,7 @@ export function createAccountForCompany(
       workspaceId,
       companyId,
       stage: stagesOf(ws.settings)[0]!,
+      offerId,
       firstSource,
       firstSourceAt: now,
       status: 'active',
@@ -186,6 +204,8 @@ export interface AccountFilters {
   /** Values within one filter are OR; separate filters are AND (docs/ui.md §3.2). */
   stage?: string | string[] | undefined;
   stream?: string | string[] | undefined;
+  /** Offer ids; `none` = accounts without an offer. */
+  offer?: string | string[] | undefined;
   ids?: string[] | undefined;
   minFit?: number | undefined;
   minIntent?: number | undefined;
@@ -226,6 +246,14 @@ export function listAccounts(tx: Tx, workspaceId: string, f: AccountFilters = {}
   const streams = many(f.stream) as ('manual' | 'personas' | 'visits' | 'conversations')[];
   if (stages.length) conds.push(inArray(accounts.stage, stages));
   if (streams.length) conds.push(inArray(accounts.firstSource, streams));
+  const offerIds = many(f.offer);
+  if (offerIds.length) {
+    const ids = offerIds.filter((o) => o !== 'none');
+    const parts: SQL[] = [];
+    if (ids.length) parts.push(inArray(accounts.offerId, ids));
+    if (ids.length !== offerIds.length) parts.push(isNull(accounts.offerId));
+    conds.push(or(...parts)!);
+  }
   if (f.ids) conds.push(f.ids.length ? inArray(accounts.id, f.ids) : sql`0`);
   if (f.minFit !== undefined) conds.push(gte(accounts.fitScore, f.minFit));
   if (f.minIntent !== undefined) conds.push(gte(accounts.intentScore, f.minIntent));
@@ -256,6 +284,7 @@ export function listAccounts(tx: Tx, workspaceId: string, f: AccountFilters = {}
       intentScore: accounts.intentScore,
       priority: accounts.priority,
       firstSource: accounts.firstSource,
+      offerId: accounts.offerId,
       status: accounts.status,
       updatedAt: accounts.updatedAt,
       createdAt: accounts.createdAt,

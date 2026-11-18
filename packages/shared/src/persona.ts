@@ -39,6 +39,8 @@ export const personaRunBodySchema = z
     tech: z.boolean().default(true),
     /** Then find people and emails for the new accounts (costs more; estimated separately). */
     people: z.boolean().default(false),
+    /** The offer to find companies for; required when more than one offer is approved. */
+    offerId: z.string().min(1).max(64).optional(),
   })
   .strict();
 export type PersonaRunBody = z.infer<typeof personaRunBodySchema>;

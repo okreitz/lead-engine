@@ -42,20 +42,7 @@ import { httpxDetector, type TechDetector } from './tech.ts';
 
 export const RUN_LIMITS = { sliceMs: 20_000, batch: 5 };
 
-/** Approved offer version the run scores against. */
-export function approvedOffer(
-  tx: Tx,
-  workspaceId: string,
-): { id: string; profile: OfferProfile } | null {
-  const row = tx
-    .select({ id: offerVersions.id, data: offerVersions.data })
-    .from(offerVersions)
-    .where(and(eq(offerVersions.workspaceId, workspaceId), eq(offerVersions.status, 'approved')))
-    .orderBy(sql`${offerVersions.approvedAt} DESC`)
-    .get();
-  const parsed = offerProfileSchema.safeParse(row?.data);
-  return row && parsed.success ? { id: row.id, profile: parsed.data } : null;
-}
+export { approvedOffer } from '../offer/approved.ts';
 
 /** Upper bound of one candidate's LLM fit call (the budget check uses the same bound). */
 export function perCandidateUsd(ctx: AppContext, workspaceId: string, offer: OfferProfile) {
@@ -185,7 +172,7 @@ export function personaFitHandler(
     if (run.state === 'done' || run.state === 'cancelled' || run.state === 'failed')
       return { skipped: run.state };
     const offerRow = ctx.db
-      .select({ data: offerVersions.data })
+      .select({ data: offerVersions.data, offerId: offerVersions.offerId })
       .from(offerVersions)
       .where(eq(offerVersions.id, run.offerVersionId))
       .get();
@@ -199,6 +186,7 @@ export function personaFitHandler(
       throw new PermanentJobError('offer version is gone');
     }
     const offer = parsed.data;
+    const offerId = offerRow!.offerId;
     if (run.state === 'queued') {
       ctx.db
         .update(personaRuns)
@@ -331,6 +319,7 @@ export function personaFitHandler(
               company.id,
               'personas',
               now,
+              offerId,
             ).id;
             tx.insert(signals)
               .values({
@@ -346,13 +335,14 @@ export function personaFitHandler(
                   reasons: llm.reasons,
                   evidence,
                   runId,
+                  offerId,
                   source: 'homepage',
                 },
                 evidenceUrl: page.url,
                 expiresAt: now + FIT_SIGNAL_TTL_MS,
               })
               .run();
-            rescoreAccount(tx, run!.workspaceId, accountId, now, offer.icp);
+            rescoreAccount(tx, run!.workspaceId, accountId, now);
           }
           tx.update(personaCandidates)
             .set({

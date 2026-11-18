@@ -45,8 +45,10 @@ import {
   deals,
   fieldSources,
   nextSteps,
+  offers,
   suppressions,
 } from '../../db/schema.ts';
+import type { Tx } from '../../db/client.ts';
 import { nameKey, sizeBounds } from '../../universe/keys.ts';
 import type { AppContext } from '../context.ts';
 import { HttpError, parse, workspaceOf } from '../http.ts';
@@ -71,10 +73,22 @@ const accountFilterQuery = {
   q: z.string().max(200).optional(),
   stage: csvList(z.string().max(40)),
   stream: csvList(z.enum(['visits', 'conversations', 'personas', 'manual'])),
+  /** Offer ids, or `none` for accounts without an offer. */
+  offer: csvList(z.string().max(64)),
   ids: csvList(z.string().max(64)),
   minFit: z.coerce.number().min(0).max(100).optional(),
   minIntent: z.coerce.number().min(0).max(100).optional(),
 };
+
+/** 404 unless the offer exists in this workspace. */
+function requireOffer(tx: Tx, workspaceId: string, offerId: string): void {
+  const row = tx
+    .select({ id: offers.id })
+    .from(offers)
+    .where(and(eq(offers.id, offerId), eq(offers.workspaceId, workspaceId)))
+    .get();
+  if (!row) throw new HttpError(404, 'offer_not_found', 'offer not found');
+}
 
 /** Turns CRM domain errors into HTTP errors. */
 function crm<T>(fn: () => T): T {
@@ -111,7 +125,8 @@ export function registerCrmRoutes(app: FastifyInstance, ctx: AppContext): void {
 
   app.post('/api/v1/accounts', async (request, reply) => {
     const { workspaceId, userId } = workspaceOf(request);
-    const body = parse(createAccountBodySchema, request.body);
+    const { offerId, ...body } = parse(createAccountBodySchema, request.body);
+    if (offerId) requireOffer(ctx.db, workspaceId, offerId);
     const res = crm(() =>
       ctx.db.transaction((tx) => {
         const r = createAccount(
@@ -120,6 +135,7 @@ export function registerCrmRoutes(app: FastifyInstance, ctx: AppContext): void {
           { ...body, ownerUserId: userId },
           'manual',
           ctx.now(),
+          offerId ?? null,
         );
         if (r.created) rescoreAccount(tx, workspaceId, r.id, ctx.now());
         return r;
@@ -142,15 +158,19 @@ export function registerCrmRoutes(app: FastifyInstance, ctx: AppContext): void {
     crm(() =>
       ctx.db.transaction((tx) => {
         const { company } = requireAccount(tx, workspaceId, id);
-        const { status, ownerUserId, ...companyFields } = body;
+        const { status, ownerUserId, offerId, ...companyFields } = body;
+        if (offerId) requireOffer(tx, workspaceId, offerId);
         tx.update(accounts)
           .set({
             ...(status ? { status } : {}),
             ...(ownerUserId !== undefined ? { ownerUserId } : {}),
+            ...(offerId !== undefined ? { offerId } : {}),
             updatedAt: now,
           })
           .where(eq(accounts.id, id))
           .run();
+        // Fit is scored against the account's offer.
+        if (offerId !== undefined) rescoreAccount(tx, workspaceId, id, now);
         if (Object.keys(companyFields).length) {
           // A person's edit overrides dataset values; its source dot then says "manual".
           const origins = { ...company.origins };

@@ -14,6 +14,8 @@ export const createAccountBodySchema = z
     sizeRange: opt(40),
     foundedYear: z.number().int().min(1600).max(2100).nullish(),
     stage: z.string().trim().min(1).max(40).optional(),
+    /** The offer (funnel) the account belongs to. */
+    offerId: z.string().min(1).max(64).nullish(),
   })
   .strict();
 
@@ -27,6 +29,8 @@ export const updateAccountBodySchema = z
     sizeRange: opt(40),
     foundedYear: z.number().int().min(1600).max(2100).nullish(),
     ownerUserId: z.string().nullish(),
+    /** Move the account to another offer (null = none; fit then uses the best offer). */
+    offerId: z.string().min(1).max(64).nullable().optional(),
     status: z.enum(['active', 'archived']).optional(),
   })
   .strict();

@@ -26,7 +26,7 @@ import { rescoreAccount } from '../crm/scoring.ts';
 import { newId } from '../ids.ts';
 import { enqueue } from '../jobs/queue.ts';
 import { budgetStatus } from '../providers/budget.ts';
-import { approvedOffer } from '../persona/run.ts';
+import { approvedOffers } from '../offer/approved.ts';
 import { ipHex, type Prefix } from '../collector/ip.ts';
 
 export type SiteRow = typeof sites.$inferSelect;
@@ -209,6 +209,8 @@ export function accountForMatch(
   workspaceId: string,
   match: Match,
   now: number,
+  /** The site's offer: the account is filed under it. */
+  offerId: string | null = null,
 ): RecordResult {
   try {
     // An existing company keeps its name and fields; a match never renames it.
@@ -220,13 +222,14 @@ export function accountForMatch(
     // The visitor's IP is in the US (step 3); a company that already exists elsewhere is
     // checked by createAccount(ForCompany), which refuses non-US companies.
     const r = existing
-      ? createAccountForCompany(tx, workspaceId, existing.id, 'visits', now)
+      ? createAccountForCompany(tx, workspaceId, existing.id, 'visits', now, offerId)
       : createAccount(
           tx,
           workspaceId,
           { domain: match.domain, name: match.companyName ?? match.domain, country: 'US' },
           'visits',
           now,
+          offerId,
         );
     return { status: 'ok', accountId: r.id, created: r.created };
   } catch (err) {
@@ -342,7 +345,7 @@ export function maybeQueuePeople(ctx: AppContext, workspaceId: string, accountId
   const acc = db.select().from(accounts).where(eq(accounts.id, accountId)).get();
   const threshold = ws.settings.fitThreshold ?? DEFAULT_FIT_THRESHOLD;
   if (!acc || acc.fitScore === null || acc.fitScore < threshold) return false;
-  if (!approvedOffer(db, workspaceId)) return false;
+  if (!approvedOffers(db, workspaceId).length) return false;
   if (budgetStatus(db, workspaceId, now).state === 'reached') return false;
   if (db.select({ id: contacts.id }).from(contacts).where(eq(contacts.accountId, accountId)).get())
     return false;
