@@ -18,6 +18,7 @@ import {
 } from '../../auth/sessions.ts';
 import { isLoopback } from '../../config.ts';
 import { memberships, sessions, users, workspaceLogos, workspaces } from '../../db/schema.ts';
+import { offerCount } from './offers.ts';
 import { newId } from '../../ids.ts';
 import { createWorkspace } from '../../workspaces.ts';
 import type { AppContext } from '../context.ts';
@@ -196,7 +197,14 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext): void 
       user: { id: auth.userId, email: auth.email },
       csrfToken: auth.csrfToken,
       role: auth.role,
-      workspace: workspace ? { ...workspace, logoUpdatedAt: logo?.updatedAt ?? null } : null,
+      workspace: workspace
+        ? {
+            ...workspace,
+            logoUpdatedAt: logo?.updatedAt ?? null,
+            offerLimit: ctx.config.maxOffers,
+            offerCount: offerCount(ctx.db, workspace.id),
+          }
+        : null,
       workspaces: workspacesOfUser(ctx, auth.userId),
     };
   });

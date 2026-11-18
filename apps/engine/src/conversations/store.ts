@@ -62,6 +62,7 @@ export function ingestThreads(
         postedAt: Math.min(item.postedAt, now),
         matchedPhrase: match.phrase,
         phraseKind: match.kind,
+        offerId: match.offerId ?? null,
         meta: item.meta ?? {},
         createdAt: now,
         updatedAt: now,
@@ -108,7 +109,12 @@ export interface FeedbackExample {
 }
 
 /** Most recent feedback of each kind, used as few-shot examples (SPEC §5.3). */
-export function feedbackExamples(tx: Tx, workspaceId: string, perKind = 3): FeedbackExample[] {
+export function feedbackExamples(
+  tx: Tx,
+  workspaceId: string,
+  perKind = 3,
+  offerId: string | null = null,
+): FeedbackExample[] {
   const out: FeedbackExample[] = [];
   for (const verdict of ['good', 'not_relevant'] as const) {
     const rows = tx
@@ -119,6 +125,8 @@ export function feedbackExamples(tx: Tx, workspaceId: string, perKind = 3): Feed
           eq(threads.workspaceId, workspaceId),
           eq(threads.feedback, verdict),
           isNotNull(threads.feedbackAt),
+          // An offer learns from feedback on its own threads ("not relevant" is per offer).
+          ...(offerId ? [eq(threads.offerId, offerId)] : []),
         ),
       )
       .orderBy(desc(threads.feedbackAt))

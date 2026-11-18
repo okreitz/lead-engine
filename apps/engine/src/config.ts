@@ -21,6 +21,11 @@ const envSchema = z.object({
   LE_COOKIE_SECURE: z.enum(['auto', 'true', 'false']).default('auto'),
   /** Run the in-process job worker (off in tests). */
   LE_JOBS: z.enum(['on', 'off']).default('on'),
+  /**
+   * Most offers (funnels) one workspace may have, e.g. for a hosted plan. Unset = no limit.
+   * Offers that already exist are kept when the limit is lowered; only new ones are refused.
+   */
+  LE_MAX_OFFERS: z.coerce.number().int().min(1).max(1000).optional(),
   /** Fallback Anthropic API key for the `anthropic-api` adapter (workspace keys take precedence). */
   ANTHROPIC_API_KEY: z.string().optional(),
   /** Folder for dataset downloads (company universe import). Default: `imports/` next to the DB. */
@@ -58,6 +63,8 @@ const envSchema = z.object({
 export interface Config {
   host: string;
   enginePort: number;
+  /** Offers per workspace; null = unlimited. */
+  maxOffers: number | null;
   collectorPort: number;
   dbPath: string;
   logLevel: z.infer<typeof envSchema>['LE_LOG_LEVEL'];
@@ -112,6 +119,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     setupToken: parsed.LE_SETUP_TOKEN ?? null,
     cookieSecure: parsed.LE_COOKIE_SECURE,
     jobs: parsed.LE_JOBS === 'on',
+    maxOffers: parsed.LE_MAX_OFFERS ?? null,
     anthropicApiKey: parsed.ANTHROPIC_API_KEY ?? null,
     importsDir: path.resolve(
       parsed.LE_IMPORTS_DIR ?? path.join(path.dirname(path.resolve(parsed.LE_DB_PATH)), 'imports'),

@@ -1,11 +1,12 @@
 import {
   createOfferBodySchema,
+  deleteOfferBodySchema,
   offerPreviewBodySchema,
   offerProfileSchema,
   REVIEW_FIELDS,
   saveOfferVersionBodySchema,
 } from '@le/shared';
-import { and, asc, desc, eq, max } from 'drizzle-orm';
+import { and, asc, count, desc, eq, max } from 'drizzle-orm';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { audit } from '../../audit.ts';
@@ -30,6 +31,12 @@ function requireOffer(tx: Tx, workspaceId: string, id: string) {
     .get();
   if (!offer) throw new HttpError(404, 'not_found', 'offer not found');
   return offer;
+}
+
+export function offerCount(tx: Tx, workspaceId: string): number {
+  return (
+    tx.select({ n: count() }).from(offers).where(eq(offers.workspaceId, workspaceId)).get()?.n ?? 0
+  );
 }
 
 function nextVersion(tx: Tx, offerId: string): number {
@@ -116,7 +123,14 @@ export function registerOfferRoutes(app: FastifyInstance, ctx: AppContext): void
     }
     const now = ctx.now();
     const offerId = newId('off');
+    const limit = ctx.config.maxOffers;
     const res = ctx.db.transaction((tx) => {
+      if (limit !== null && offerCount(tx, workspaceId) >= limit)
+        throw new HttpError(
+          409,
+          'offer_limit',
+          `this workspace can have ${limit} offer${limit === 1 ? '' : 's'}; delete one to add another`,
+        );
       tx.insert(offers)
         .values({
           id: offerId,
@@ -144,6 +158,31 @@ export function registerOfferRoutes(app: FastifyInstance, ctx: AppContext): void
       now,
     );
     return reply.code(201).send({ id: offerId, ...res });
+  });
+
+  // Destructive: the owner types the offer's exact name. Its versions and Find runs go with
+  // it; accounts, threads and sites stay and lose the offer (their fit uses the other offers).
+  app.delete('/api/v1/offers/:id', { config: { owner: true } }, async (request) => {
+    const { workspaceId, userId } = workspaceOf(request);
+    const { id } = parse(params, request.params);
+    const { confirmName } = parse(deleteOfferBodySchema, request.body);
+    const offer = requireOffer(ctx.db, workspaceId, id);
+    const name = offer.name || offer.websiteUrl;
+    if (confirmName !== name)
+      throw new HttpError(400, 'confirm_mismatch', 'type the offer name exactly to delete it');
+    const now = ctx.now();
+    ctx.db.transaction((tx) => {
+      tx.delete(offers)
+        .where(and(eq(offers.id, id), eq(offers.workspaceId, workspaceId)))
+        .run();
+      rescoreWorkspace(tx, workspaceId, now);
+    });
+    audit(
+      ctx.db,
+      { workspaceId, userId, action: 'offer.delete', target: `offer:${id}`, details: { name } },
+      now,
+    );
+    return { ok: true };
   });
 
   /** What a draft or redraft will cost at most, shown before it runs (docs/ui.md §1.3). */

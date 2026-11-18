@@ -14,10 +14,14 @@ export type IntentPageInput = z.infer<typeof intentPageSchema>;
 
 export const siteCreateSchema = z.object({
   domain: z.string().trim().min(3).max(253),
+  /** The offer (funnel) the site belongs to. Default: the offer drafted from this domain. */
+  offerId: z.string().min(1).max(64).nullish(),
 });
 
 export const siteUpdateSchema = z.object({
-  intentPages: z.array(intentPageSchema).max(20),
+  intentPages: z.array(intentPageSchema).max(20).optional(),
+  /** null = the site's visitors are scored against every offer. */
+  offerId: z.string().min(1).max(64).nullable().optional(),
 });
 
 /** Grouped dropped-traffic categories for the Visitors header (docs/ui.md §3.6). */

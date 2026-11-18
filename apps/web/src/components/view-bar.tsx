@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Popover } from '@/components/ui/popover';
 import { api, errorMessage } from '@/lib/api';
 import { useMe } from '@/lib/me';
+import { offerLabel, useOffers } from '@/lib/offers';
 import { cn } from '@/lib/utils';
 import {
   OPTIONAL_COLUMNS,
@@ -51,6 +52,12 @@ export function ViewBar({
 }) {
   const qc = useQueryClient();
   const stages = useMe().data?.workspace?.settings.stages ?? [];
+  const offers = useOffers();
+  const offerOptions = [
+    ...offers.all.map((o) => ({ key: o.id, label: offerLabel(o) })),
+    { key: 'none', label: 'No offer' },
+  ];
+  const offerName = (k: string) => offerOptions.find((o) => o.key === k)?.label ?? k;
   const [naming, setNaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const saved = views.filter((v) => v.entity === 'accounts' || v.entity === entity);
@@ -281,6 +288,13 @@ export function ViewBar({
               checkList(STREAMS, state.stream, (v) => set({ stream: v })),
             )
           : null}
+        {state.offer.length
+          ? chip(
+              `Offer: ${state.offer.map(offerName).join(', ')}`,
+              () => set({ offer: [] }),
+              checkList(offerOptions, state.offer, (v) => set({ offer: v })),
+            )
+          : null}
         {state.fit
           ? chip(
               `Fit ≥ ${state.fit}`,
@@ -314,6 +328,12 @@ export function ViewBar({
               <div className="text-muted-foreground mb-1 text-xs font-medium">Stream (any of)</div>
               {checkList(STREAMS, state.stream, (v) => set({ stream: v }))}
             </div>
+            {offers.multiple ? (
+              <div>
+                <div className="text-muted-foreground mb-1 text-xs font-medium">Offer (any of)</div>
+                {checkList(offerOptions, state.offer, (v) => set({ offer: v }))}
+              </div>
+            ) : null}
             {numberInput(state.fit, (v) => set({ fit: v }), 'Fit')}
             {numberInput(state.intent, (v) => set({ intent: v }), 'Intent')}
           </div>

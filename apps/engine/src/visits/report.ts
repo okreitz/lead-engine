@@ -11,6 +11,7 @@ import {
   accounts,
   companies,
   ipCompanies,
+  offers,
   providerKeys,
   signals,
   sites,
@@ -34,6 +35,7 @@ export function siteView(ctx: AppContext, site: SiteRow) {
   return {
     id: site.id,
     domain: site.domain,
+    offerId: site.offerId,
     siteKey: site.siteKey,
     intentPages: site.intentPages,
     snippet: snippetHtml(ctx.config.collector.publicUrl, site.siteKey),
@@ -74,7 +76,42 @@ export function requireSite(tx: Tx, workspaceId: string, siteId: string): SiteRo
   return site;
 }
 
-export function createSite(ctx: AppContext, workspaceId: string, rawDomain: string): SiteRow {
+/** 404 unless the offer exists in this workspace. */
+export function requireWorkspaceOffer(tx: Tx, workspaceId: string, offerId: string): void {
+  const row = tx
+    .select({ id: offers.id })
+    .from(offers)
+    .where(and(eq(offers.id, offerId), eq(offers.workspaceId, workspaceId)))
+    .get();
+  if (!row) throw new CrmError('not_found', 'offer not found', 404);
+}
+
+/** The offer drafted from this domain (or a subdomain of it), else null. */
+export function offerForDomain(tx: Tx, workspaceId: string, domain: string): string | null {
+  const rows = tx
+    .select({ id: offers.id, websiteUrl: offers.websiteUrl })
+    .from(offers)
+    .where(eq(offers.workspaceId, workspaceId))
+    .orderBy(offers.createdAt)
+    .all();
+  for (const o of rows) {
+    let host: string;
+    try {
+      host = new URL(o.websiteUrl).hostname.toLowerCase().replace(/^www\./, '');
+    } catch {
+      continue;
+    }
+    if (host === domain || host.endsWith(`.${domain}`) || domain.endsWith(`.${host}`)) return o.id;
+  }
+  return null;
+}
+
+export function createSite(
+  ctx: AppContext,
+  workspaceId: string,
+  rawDomain: string,
+  offerId?: string | null,
+): SiteRow {
   const domain = normalizeDomain(rawDomain).replace(/^www\./, '');
   if (!isValidDomain(domain))
     throw new CrmError('invalid_domain', `not a valid domain: ${rawDomain}`);
@@ -84,10 +121,12 @@ export function createSite(ctx: AppContext, workspaceId: string, rawDomain: stri
     .where(and(eq(sites.workspaceId, workspaceId), eq(sites.domain, domain)))
     .get();
   if (exists) throw new CrmError('exists', `${domain} is already a site`, 409);
+  if (offerId) requireWorkspaceOffer(ctx.db, workspaceId, offerId);
   const row = {
     id: newId('site'),
     workspaceId,
     domain,
+    offerId: offerId === undefined ? offerForDomain(ctx.db, workspaceId, domain) : offerId,
     siteKey: `site_${randomBytes(12).toString('base64url')}`,
     intentPages: DEFAULT_INTENT_PAGES.map((p) => ({ ...p })) as IntentPage[],
     createdAt: ctx.now(),

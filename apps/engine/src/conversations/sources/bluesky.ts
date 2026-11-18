@@ -10,8 +10,8 @@ import { and, eq } from 'drizzle-orm';
 import type { AppContext } from '../../api/context.ts';
 import { conversationSources, engineState, workspaces } from '../../db/schema.ts';
 import { maskSecrets } from '../../log-mask.ts';
-import { approvedOffer } from '../../persona/run.ts';
-import { compilePhrases, matchText, type CompiledPhrase } from '../prefilter.ts';
+import { approvedOffers } from '../../offer/approved.ts';
+import { compileOffers, matchText, type CompiledPhrase } from '../prefilter.ts';
 import { deleteBySourceId, ingestThreads } from '../store.ts';
 import type { RawThread } from '../types.ts';
 
@@ -169,12 +169,12 @@ export class BlueskyStream {
           )
           .get();
         if (row && !row.enabled) continue;
-        const offer = approvedOffer(db, ws.id);
-        if (!offer) continue;
+        const offers = approvedOffers(db, ws.id);
+        if (!offers.length) continue;
         const prev = this.matchers.find((m) => m.workspaceId === ws.id);
         next.push({
           workspaceId: ws.id,
-          compiled: compilePhrases(offer.profile.intentPhrases),
+          compiled: compileOffers(offers),
           day: today,
           stored: prev && prev.day === today ? prev.stored : 0,
         });

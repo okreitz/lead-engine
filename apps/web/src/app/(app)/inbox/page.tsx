@@ -30,6 +30,7 @@ import {
 } from '@/lib/inbox';
 import { useKeys } from '@/lib/keys';
 import { useMe } from '@/lib/me';
+import { offerLabel, useOffers } from '@/lib/offers';
 import { useSheet } from '@/lib/sheet';
 import { cn } from '@/lib/utils';
 
@@ -59,9 +60,11 @@ function Inbox() {
     : 'priority';
   const source = params.get('source');
   const minIntent = params.get('intent') === '3' ? 3 : null;
+  const offer = params.get('offer');
+  const offers = useOffers();
   const list = useQuery({
-    queryKey: ['inbox', tab, source, minIntent],
-    queryFn: () => fetchInbox(tab, source, minIntent),
+    queryKey: ['inbox', tab, source, minIntent, offer],
+    queryFn: () => fetchInbox(tab, source, minIntent, offer),
     refetchInterval: 60_000,
   });
   const sources = useQuery({ queryKey: ['conversation-sources'], queryFn: fetchSources });
@@ -193,9 +196,24 @@ function Inbox() {
             </button>
           ))}
         </div>
+        {offers.multiple ? (
+          <NativeSelect
+            aria-label="Offer"
+            className="ml-auto w-44"
+            value={offer ?? ''}
+            onChange={(e) => setParam('offer', e.target.value || null)}
+          >
+            <option value="">All offers</option>
+            {offers.all.map((o) => (
+              <option key={o.id} value={o.id}>
+                {offerLabel(o)}
+              </option>
+            ))}
+          </NativeSelect>
+        ) : null}
         <NativeSelect
           aria-label="Source"
-          className="ml-auto w-44"
+          className={cn('w-44', !offers.multiple && 'ml-auto')}
           value={source ?? ''}
           onChange={(e) => setParam('source', e.target.value || null)}
         >
@@ -269,6 +287,9 @@ function Inbox() {
               <span className="min-w-0 flex-1">
                 <span className="line-clamp-2">{t.title}</span>
                 <span className="text-muted-foreground flex flex-wrap gap-1 text-[11px]">
+                  {offers.multiple && offers.name(t.offerId) ? (
+                    <span className="text-foreground/70 font-medium">{offers.name(t.offerId)}</span>
+                  ) : null}
                   {t.label && t.label !== 'none' ? <span>{THREAD_LABEL_TEXT[t.label]}</span> : null}
                   {t.selfPromo ? <span>· self-promo</span> : null}
                   {t.snoozed ? <span>· snoozed</span> : null}
@@ -336,6 +357,8 @@ function ThreadDetail({
   onGood: () => void;
   onSaved: () => Promise<void>;
 }) {
+  const offers = useOffers();
+  const offerName = offers.multiple ? offers.name(t.offerId) : null;
   const [draft, setDraft] = useState(t.replyDraft ?? t.suggestedReply ?? '');
   const [copied, setCopied] = useState(false);
   const saved = t.replyDraft ?? t.suggestedReply ?? '';
@@ -361,7 +384,7 @@ function ThreadDetail({
         {repo ? ` · ${repo}` : ''}
         {sub ? ` · r/${sub}` : ''}
         {t.author && t.source !== 'bluesky' ? ` · ${t.author}` : ''} · {ago(t.postedAt)} ago ·
-        matched “{t.matchedPhrase}”
+        matched “{t.matchedPhrase}”{offerName ? ` for ${offerName}` : ''}
       </p>
       <h2 className="text-lg font-semibold">
         <a href={t.url} target="_blank" rel="noopener noreferrer" className="hover:underline">

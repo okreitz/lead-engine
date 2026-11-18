@@ -13,7 +13,7 @@ import { ContinueJob, PermanentJobError, type JobHandler } from '../jobs/queue.t
 import { LlmOutputError, runLlm } from '../llm/index.ts';
 import { buildPrompt, type DataBlock } from '../llm/prompt.ts';
 import { offerBrief } from '../persona/fit.ts';
-import { approvedOffer } from '../persona/run.ts';
+import { approvedOffers } from '../offer/approved.ts';
 import { ProviderCallError } from '../providers/errors.ts';
 import { feedbackExamples, type FeedbackExample } from './store.ts';
 
@@ -151,7 +151,7 @@ export async function scoreThread(
 ): Promise<ThreadScore | null> {
   const t = ctx.db.select().from(threads).where(eq(threads.id, threadId)).get();
   if (!t || t.workspaceId !== workspaceId) return null;
-  const examples = feedbackExamples(ctx.db, workspaceId);
+  const examples = feedbackExamples(ctx.db, workspaceId, 3, t.offerId);
   const prompt = buildScorePrompt(offer, t, examples);
   let out: ThreadScore;
   try {
@@ -206,8 +206,11 @@ export async function scoreThread(
 /** `conversations.score`: scores pending threads in slices, up to the daily cap. */
 export function threadScoreHandler(): JobHandler {
   return async ({ ctx, job }) => {
-    const offer = approvedOffer(ctx.db, job.workspaceId);
-    if (!offer) throw new PermanentJobError('no approved offer profile');
+    const offers = approvedOffers(ctx.db, job.workspaceId);
+    if (!offers.length) throw new PermanentJobError('no approved offer profile');
+    // Each thread is scored against the offer whose phrase matched it.
+    const offerOf = (offerId: string | null) =>
+      offers.find((o) => o.offerId === offerId) ?? offers[0]!;
     const started = ctx.now();
     let scored = 0;
     let inbox = 0;
@@ -215,15 +218,15 @@ export function threadScoreHandler(): JobHandler {
       const left = dailyScoringCap(ctx, job.workspaceId) - scoredToday(ctx, job.workspaceId);
       if (left <= 0) return { scored, inbox, capped: true };
       const batch = ctx.db
-        .select({ id: threads.id })
+        .select({ id: threads.id, offerId: threads.offerId })
         .from(threads)
         .where(and(eq(threads.workspaceId, job.workspaceId), eq(threads.scoreStatus, 'pending')))
         .orderBy(asc(threads.createdAt))
         .limit(Math.min(SLICE.batch, left))
         .all();
       if (!batch.length) return { scored, inbox };
-      for (const { id } of batch) {
-        const r = await scoreThread(ctx, job.workspaceId, id, offer.profile, job.id);
+      for (const { id, offerId } of batch) {
+        const r = await scoreThread(ctx, job.workspaceId, id, offerOf(offerId).profile, job.id);
         if (r) {
           scored++;
           if (r.intent >= INBOX_MIN_INTENT) inbox++;

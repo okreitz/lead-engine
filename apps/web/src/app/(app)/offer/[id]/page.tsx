@@ -7,12 +7,14 @@ import { Check, Info, Pencil, X } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState, type ReactNode } from 'react';
 import { CostAction } from '@/components/blocks/cost-action';
+import { ConfirmButton } from '@/components/confirm';
 import { SkeletonRows } from '@/components/blocks/empty-state';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
 import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
 import { Tooltip } from '@/components/ui/tooltip';
 import { api, ApiError, errorMessage, fmtDate } from '@/lib/api';
+import { useMe } from '@/lib/me';
 import { diffVersions, emptyOf, FIELD_LABEL, getField, setField, type Review } from '@/lib/offer';
 import { cn } from '@/lib/utils';
 
@@ -66,6 +68,7 @@ function OfferDetail() {
   const params = useSearchParams();
   const router = useRouter();
   const qc = useQueryClient();
+  const owner = useMe().data?.role === 'owner';
   const q = useQuery({
     queryKey: ['offer', id],
     queryFn: () => api<Detail>(`/offers/${id}`),
@@ -90,6 +93,7 @@ function OfferDetail() {
   };
 
   if (!q.data) return <SkeletonRows rows={6} />;
+  const offerName = q.data.offer.name || q.data.offer.websiteUrl;
   const refresh = () => qc.invalidateQueries({ queryKey: ['offer', id] });
   const compareTarget =
     current && compare ? (versions.find((v) => v.version === compare) ?? null) : null;
@@ -192,6 +196,26 @@ function OfferDetail() {
             onSaved={(n) => {
               go({ v: n });
               void refresh();
+            }}
+          />
+        </div>
+      ) : null}
+      {owner ? (
+        <div className="flex justify-end border-t pt-4">
+          <ConfirmButton
+            trigger={
+              <Button size="sm" variant="ghost">
+                Delete offer
+              </Button>
+            }
+            title={`Delete ${offerName}?`}
+            description="Deletes this offer with all its versions and Find runs. Its accounts, inbox threads and sites stay, without an offer; their fit is then scored against your other offers."
+            typeToConfirm={offerName}
+            onConfirm={async () => {
+              await api(`/offers/${id}`, { method: 'DELETE', body: { confirmName: offerName } });
+              await qc.invalidateQueries({ queryKey: ['offers'] });
+              await qc.invalidateQueries({ queryKey: ['me'] });
+              router.push('/offer');
             }}
           />
         </div>

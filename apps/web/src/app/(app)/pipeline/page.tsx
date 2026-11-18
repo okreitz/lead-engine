@@ -20,6 +20,7 @@ import type { AccountRow } from '@/lib/crm';
 import { useKeys } from '@/lib/keys';
 import { useSheet } from '@/lib/sheet';
 import { cn } from '@/lib/utils';
+import { useOffers } from '@/lib/offers';
 import { apiQuery, useViewState } from '@/lib/views';
 
 interface Pipeline {
@@ -343,6 +344,8 @@ function Card({
     data: account,
   });
   const days = Math.max(0, Math.floor((now - account.stageSince) / DAY));
+  const offers = useOffers();
+  const offerName = offers.multiple ? offers.name(account.offerId) : null;
   return (
     <div
       ref={setNodeRef}
@@ -379,6 +382,7 @@ function Card({
       </div>
       <div className="text-muted-foreground text-xs">
         {days}d in stage{account.openDealsUsd ? ` · ${usd(account.openDealsUsd)}` : ''}
+        {offerName ? ` · ${offerName}` : ''}
       </div>
     </div>
   );
