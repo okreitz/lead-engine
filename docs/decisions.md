@@ -246,3 +246,6 @@ The first real offer draft on the VPS failed with "claude CLI returned no JSON (
 
 ## 2026-11-16: Workspace logo in its own table, PNG/JPEG/WebP only
 Each workspace can upload a sidebar logo (Settings → General). The bytes live in `workspace_logos`, not `workspaces`, so they never load with the workspace row; `/auth/me` only reports `logoUpdatedAt`, which the image URL uses as its cache key. SVG is refused because it can carry script; the type is checked by magic bytes and served with `nosniff` and `default-src 'none'`.
+
+## 2026-11-18: One workspace, several offers
+A workspace is one company's lead engine; its businesses and funnels (consulting, &Human, Future's People) are offers inside it, sharing one CRM, one budget and one set of keys. Every approved offer runs, not only the newest. Accounts, threads and sites carry a nullable `offer_id` (set by the stream that found them, or by hand): fit and the scoring prompt use that offer, people search uses its personas, and an account without one gets the best fit across offers. A thread matching phrases of two offers belongs to the first match only, to keep one inbox row per post. `LE_MAX_OFFERS` is an instance setting for now; per-plan limits move to Phase 5 billing.

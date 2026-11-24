@@ -15,6 +15,9 @@ export interface Workspace {
   };
   /** Set when the workspace has a logo; also its cache-busting version. */
   logoUpdatedAt?: number | null;
+  /** Most offers this workspace may have (null = no limit), and how many it has. */
+  offerLimit?: number | null;
+  offerCount?: number;
 }
 
 export interface Me {

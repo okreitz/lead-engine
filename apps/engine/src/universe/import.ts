@@ -13,7 +13,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 import { eq } from 'drizzle-orm';
 import type { AppContext } from '../api/context.ts';
-import { activeIcp } from '../crm/scoring.ts';
+import { approvedOffers } from '../offer/approved.ts';
 import type { Db, Tx } from '../db/client.ts';
 import { companies, universeImports, type ImportFilter } from '../db/schema.ts';
 import { newId } from '../ids.ts';
@@ -50,16 +50,19 @@ export function sourceOf(id: string): SourceDef {
   return s;
 }
 
-/** The ICP prefilter from the workspace's approved offer, or null (no ICP / not applicable). */
+/**
+ * The ICP prefilter from the workspace's approved offers, or null (none approved). With
+ * several offers a company is kept when it fits any of them.
+ */
 export function icpFilterFor(db: Db, workspaceId: string): ImportFilter | null {
-  const icp = activeIcp(db, workspaceId);
-  if (!icp) return null;
-  return {
+  const filters: ImportFilter[] = approvedOffers(db, workspaceId).map(({ profile: { icp } }) => ({
     industries: icp.industries,
     employeeRange: icp.employeeRange || null,
     states: icp.states,
     exclude: icp.exclude,
-  };
+  }));
+  if (filters.length <= 1) return filters[0] ?? null;
+  return { industries: [], employeeRange: null, states: [], exclude: [], anyOf: filters };
 }
 
 /** Creates the import row and queues its job. */

@@ -5,7 +5,7 @@ import { findAccount } from '../../crm/accounts.ts';
 import { jobs } from '../../db/schema.ts';
 import { enqueue } from '../../jobs/queue.ts';
 import { estimates } from '../../people/jobs.ts';
-import { approvedOffer } from '../../persona/run.ts';
+import { approvedOffers } from '../../offer/approved.ts';
 import type { AppContext } from '../context.ts';
 import { HttpError, parse, workspaceOf } from '../http.ts';
 
@@ -67,7 +67,7 @@ export function registerPeopleRoutes(app: FastifyInstance, ctx: AppContext): voi
     const { id } = parse(idParam, request.params);
     const body = parse(peopleBody, request.body ?? {});
     requireAcc(workspaceId, id);
-    if (!approvedOffer(ctx.db, workspaceId))
+    if (!approvedOffers(ctx.db, workspaceId).length)
       throw new HttpError(409, 'no_offer', 'approve an offer profile first');
     if (running(workspaceId, id, 'people.find'))
       throw new HttpError(409, 'already_running', 'already finding people');

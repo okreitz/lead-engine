@@ -43,6 +43,8 @@ const listQuery = z.object({
     .transform((s) => (s ? s.split(',') : undefined))
     .pipe(z.array(z.enum(THREAD_SOURCES)).optional()),
   minIntent: z.coerce.number().int().min(0).max(3).optional(),
+  /** Offer id, or `none` for threads without an offer. */
+  offer: z.string().min(1).max(64).optional(),
 });
 
 /** Stream 2: the Conversations inbox and its sources (docs/ui.md §3.5). */

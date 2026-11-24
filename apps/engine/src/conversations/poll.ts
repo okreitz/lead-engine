@@ -15,13 +15,13 @@ import type { Tx } from '../db/client.ts';
 import { conversationSources, jobs, workspaces } from '../db/schema.ts';
 import { ContinueJob, enqueue, PermanentJobError, type JobHandler } from '../jobs/queue.ts';
 import { maskSecrets } from '../log-mask.ts';
-import { approvedOffer } from '../persona/run.ts';
+import { approvedOffers } from '../offer/approved.ts';
 import {
   BudgetExceededError,
   ProviderCallError,
   ProviderKeyMissingError,
 } from '../providers/errors.ts';
-import { compilePhrases } from './prefilter.ts';
+import { compileOffers, unionPhrases } from './prefilter.ts';
 import { githubSource } from './sources/github.ts';
 import { hnSource } from './sources/hn.ts';
 import { redditSource } from './sources/reddit.ts';
@@ -132,7 +132,7 @@ export function scheduleConversations(ctx: AppContext): number {
   const now = ctx.now();
   let queued = 0;
   for (const ws of ctx.db.select({ id: workspaces.id }).from(workspaces).all()) {
-    if (!approvedOffer(ctx.db, ws.id)) continue;
+    if (!approvedOffers(ctx.db, ws.id).length) continue;
     for (const source of THREAD_SOURCES) {
       if (source === 'bluesky') continue;
       const row = sourceRow(ctx.db, ws.id, source, now);
@@ -151,8 +151,8 @@ export function conversationPollHandler(): JobHandler {
     const source = job.payload.source as ThreadSource;
     const adapter = POLLING_SOURCES[source as Exclude<ThreadSource, 'bluesky'>];
     if (!adapter) throw new PermanentJobError(`unknown source ${String(source)}`);
-    const offer = approvedOffer(ctx.db, job.workspaceId);
-    if (!offer) throw new PermanentJobError('no approved offer profile');
+    const offers = approvedOffers(ctx.db, job.workspaceId);
+    if (!offers.length) throw new PermanentJobError('no approved offer profile');
     const now = ctx.now();
     const row = sourceRow(ctx.db, job.workspaceId, source, now);
     if (!row.enabled) return { skipped: 'disabled' };
@@ -163,14 +163,14 @@ export function conversationPollHandler(): JobHandler {
       const out = await adapter.poll({
         ctx,
         workspaceId: job.workspaceId,
-        phrases: offer.profile.intentPhrases,
+        phrases: unionPhrases(offers),
         cursor: row.cursor,
         jobId: job.id,
         deadline: now + SLICE_MS,
         sleep,
         settings: conversationSettings(ctx.db, job.workspaceId),
       });
-      const compiled = compilePhrases(offer.profile.intentPhrases);
+      const compiled = compileOffers(offers);
       const ingest = ctx.db.transaction((tx) =>
         ingestThreads(tx, job.workspaceId, compiled, out.items, ctx.now()),
       );

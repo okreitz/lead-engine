@@ -10,6 +10,8 @@ export interface ViewState {
   q: string;
   stage: string[];
   stream: string[];
+  /** Offer ids; `none` = accounts without an offer. */
+  offer: string[];
   fit: string;
   intent: string;
   sort: string;
@@ -31,11 +33,13 @@ export interface SavedView {
   };
 }
 
-export const DEFAULT_COLUMNS = ['priority', 'stage', 'stream', 'last', 'next'];
+/** `offer` only shows when the workspace has more than one offer. */
+export const DEFAULT_COLUMNS = ['priority', 'stage', 'offer', 'stream', 'last', 'next'];
 export const OPTIONAL_COLUMNS: { key: string; label: string }[] = [
   { key: 'priority', label: 'Priority' },
   { key: 'stage', label: 'Stage' },
   { key: 'stream', label: 'Stream' },
+  { key: 'offer', label: 'Offer' },
   { key: 'last', label: 'Last' },
   { key: 'next', label: 'Next step' },
   { key: 'industry', label: 'Industry' },
@@ -68,6 +72,7 @@ export function stateToParams(s: Partial<ViewState>): URLSearchParams {
   if (s.q) p.set('q', s.q);
   if (s.stage?.length) p.set('stage', s.stage.join(','));
   if (s.stream?.length) p.set('stream', s.stream.join(','));
+  if (s.offer?.length) p.set('offer', s.offer.join(','));
   if (s.fit) p.set('fit', s.fit);
   if (s.intent) p.set('intent', s.intent);
   if (s.sort && s.sort !== 'priority') p.set('sort', s.sort);
@@ -84,6 +89,7 @@ export function viewToState(key: string, state: SavedView['state']): Partial<Vie
     view: key,
     stage: f.stage ?? [],
     stream: f.stream ?? [],
+    offer: f.offer ?? [],
     fit: f.fit?.[0] ?? '',
     intent: f.intent?.[0] ?? '',
     q: f.q?.[0] ?? '',
@@ -97,6 +103,7 @@ export function stateToSaved(s: ViewState): SavedView['state'] {
   const filters: Record<string, string[]> = {};
   if (s.stage.length) filters.stage = s.stage;
   if (s.stream.length) filters.stream = s.stream;
+  if (s.offer.length) filters.offer = s.offer;
   if (s.fit) filters.fit = [s.fit];
   if (s.intent) filters.intent = [s.intent];
   if (s.q) filters.q = [s.q];
@@ -127,6 +134,7 @@ export function useViewState() {
       q: params.get('q') ?? '',
       stage: list(params.get('stage')),
       stream: list(params.get('stream')),
+      offer: list(params.get('offer')),
       fit: params.get('fit') ?? '',
       intent: params.get('intent') ?? '',
       sort: params.get('sort') ?? 'priority',
@@ -154,6 +162,7 @@ export function emptyState(): ViewState {
     q: '',
     stage: [],
     stream: [],
+    offer: [],
     fit: '',
     intent: '',
     sort: 'priority',
@@ -168,6 +177,7 @@ export function apiQuery(s: ViewState): string {
   if (s.q) p.set('q', s.q);
   if (s.stage.length) p.set('stage', s.stage.join(','));
   if (s.stream.length) p.set('stream', s.stream.join(','));
+  if (s.offer.length) p.set('offer', s.offer.join(','));
   if (s.fit) p.set('minFit', s.fit);
   if (s.intent) p.set('minIntent', s.intent);
   if (s.sort) p.set('sort', s.sort);

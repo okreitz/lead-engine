@@ -9,6 +9,7 @@ export interface IntentPage {
 export interface Site {
   id: string;
   domain: string;
+  offerId: string | null;
   siteKey: string;
   intentPages: IntentPage[];
   snippet: string;

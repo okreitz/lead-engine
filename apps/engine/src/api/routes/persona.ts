@@ -6,13 +6,16 @@ import { audit } from '../../audit.ts';
 import {
   companies,
   jobs,
+  offers,
+  offerVersions,
   personaCandidates,
   personaRuns,
   type CandidateFilters,
 } from '../../db/schema.ts';
 import { countCandidates, filtersFromIcp, selectCandidates } from '../../persona/candidates.ts';
 import { emailPerContactUsd, peopleEstimateUsd } from '../../people/jobs.ts';
-import { approvedOffer, perCandidateUsd, startRun } from '../../persona/run.ts';
+import { approvedOffers } from '../../offer/approved.ts';
+import { perCandidateUsd, startRun } from '../../persona/run.ts';
 import { budgetStatus } from '../../providers/budget.ts';
 import type { AppContext } from '../context.ts';
 import { HttpError, parse, workspaceOf } from '../http.ts';
@@ -23,8 +26,21 @@ const idParam = z.object({ id: z.string().min(1).max(64) });
 export function registerPersonaRoutes(app: FastifyInstance, ctx: AppContext): void {
   const prepare = (workspaceId: string, body: unknown) => {
     const input = parse(personaRunBodySchema, body ?? {});
-    const offer = approvedOffer(ctx.db, workspaceId);
-    if (!offer) throw new HttpError(409, 'no_offer', 'approve an offer profile first');
+    const all = approvedOffers(ctx.db, workspaceId);
+    if (!all.length) throw new HttpError(409, 'no_offer', 'approve an offer profile first');
+    const offer = input.offerId
+      ? all.find((o) => o.offerId === input.offerId)
+      : all.length === 1
+        ? all[0]
+        : undefined;
+    if (!offer)
+      throw new HttpError(
+        400,
+        input.offerId ? 'offer_not_approved' : 'choose_offer',
+        input.offerId
+          ? 'that offer has no approved version'
+          : 'choose which offer to find companies for',
+      );
     const filters: CandidateFilters = filtersFromIcp(offer.profile.icp);
     for (const [k, v] of Object.entries(input.filters ?? {}))
       if (v !== undefined) (filters as unknown as Record<string, unknown>)[k] = v;
@@ -83,7 +99,7 @@ export function registerPersonaRoutes(app: FastifyInstance, ctx: AppContext): vo
         userId,
         action: 'persona.run',
         target: `run:${res.id}`,
-        details: { candidates: res.candidates, estimateUsd: p.usd },
+        details: { candidates: res.candidates, estimateUsd: p.usd, offerId: p.offer.offerId },
       },
       ctx.now(),
     );
@@ -98,7 +114,18 @@ export function registerPersonaRoutes(app: FastifyInstance, ctx: AppContext): vo
           .where(eq(jobs.id, run.jobId))
           .get()
       : undefined;
-    return { ...run, job: job ?? null };
+    const offer = ctx.db
+      .select({ offerId: offerVersions.offerId, name: offers.name })
+      .from(offerVersions)
+      .innerJoin(offers, eq(offers.id, offerVersions.offerId))
+      .where(eq(offerVersions.id, run.offerVersionId))
+      .get();
+    return {
+      ...run,
+      job: job ?? null,
+      offerId: offer?.offerId ?? null,
+      offerName: offer?.name ?? null,
+    };
   };
 
   app.get('/api/v1/persona/runs', async (request) => {

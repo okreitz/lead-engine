@@ -29,6 +29,7 @@ Set these under **Environment Variables**. Mark them as secrets where Coolify of
 | (workspace) Stack Exchange, GitHub, Serper keys | for those inbox sources | Not env vars: each workspace enters them in Settings → Provider keys. All free (Serper: its 2,500 free queries only; paid queries are capped at $0). Hacker News and Bluesky need no key. |
 | `LE_CLIENT_IP_HEADER` | no | `x-real-ip` (default). Coolify's Traefik sets it to the visitor's address and drops any value a visitor sends; only change it behind a different proxy. |
 | (workspace) ipapi.is key | for website visitors | Not an env var: each workspace enters its own free ipapi.is key in Settings → Provider keys (their terms require one account per customer). Without it, business visits stay "unclassified". |
+| `LE_MAX_OFFERS` | no | Most offers (businesses/funnels) one workspace may have, e.g. `3` for a hosted plan. Empty = no limit. Lowering it keeps existing offers; only new ones are refused. |
 | `LE_LOG_LEVEL` | no | `info` (default). |
 
 There is no separate session secret. Sessions are random 256-bit tokens; only their SHA-256 is stored in SQLite, and every unsafe request also needs a per-session CSRF token.

@@ -50,23 +50,32 @@ export function llmDraft(overrides: object = {}) {
 
 export const ACCEPT_ALL = Object.fromEntries(REVIEW_FIELDS.map((f) => [f, 'accepted']));
 
-/** Inserts an approved offer version with the given ICP overrides (no draft job). */
-export function approveOffer(ctx: AppContext, icp: object = {}, extra: object = {}): string {
+/**
+ * Inserts an approved offer version with the given ICP overrides (no draft job). Returns the
+ * version id. `opts.key` gives a second offer distinct ids (`off_<key>`, `ofv_<key>`).
+ */
+export function approveOffer(
+  ctx: AppContext,
+  icp: object = {},
+  extra: object = {},
+  opts: { key?: string; name?: string; websiteUrl?: string; approvedAt?: number } = {},
+): string {
   const now = ctx.now();
   const ws = ctx.db.select().from(workspaces).get()!;
-  const offerId = `off_${now}`;
+  const key = opts.key ?? String(now);
+  const offerId = `off_${key}`;
   ctx.db
     .insert(offers)
     .values({
       id: offerId,
       workspaceId: ws.id,
-      name: 'X',
-      websiteUrl: 'https://x.com',
+      name: opts.name ?? 'X',
+      websiteUrl: opts.websiteUrl ?? 'https://x.com',
       createdAt: now,
       updatedAt: now,
     })
     .run();
-  const id = `ofv_${now}`;
+  const id = `ofv_${key}`;
   ctx.db
     .insert(offerVersions)
     .values({
@@ -79,7 +88,7 @@ export function approveOffer(ctx: AppContext, icp: object = {}, extra: object = 
       data: draft({ icp: { ...draft().icp, ...icp }, ...extra }),
       createdAt: now,
       updatedAt: now,
-      approvedAt: now,
+      approvedAt: opts.approvedAt ?? now,
     })
     .run();
   return id;

@@ -17,6 +17,7 @@ import { HoverCard } from '@/components/ui/tooltip';
 import { api, errorMessage, fmtDate, usd } from '@/lib/api';
 import type { AccountDetail, FieldSource, Signal } from '@/lib/crm';
 import { useMe } from '@/lib/me';
+import { offerLabel, useOffers } from '@/lib/offers';
 import { cn } from '@/lib/utils';
 import { confidenceLabel, markWrongCompany } from '@/lib/visitors';
 import { MATCH_SOURCE_LABELS } from '@le/shared';
@@ -84,6 +85,7 @@ export function AccountView({
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<SignalFilter>('all');
 
+  const offers = useOffers();
   const run = async (fn: () => Promise<unknown>) => {
     try {
       setError(null);
@@ -277,9 +279,36 @@ export function AccountView({
 
   const fitColumn = (
     <section aria-labelledby="fit-h" className="flex flex-col gap-3">
-      <h2 id="fit-h" className="text-sm font-semibold">
-        Fit
-      </h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="fit-h" className="text-sm font-semibold">
+          Fit
+        </h2>
+        {offers.multiple ? (
+          <label className="text-muted-foreground flex items-center gap-1.5 text-xs">
+            Offer
+            <NativeSelect
+              aria-label="Offer this account belongs to"
+              className="h-7 w-auto py-0 text-xs"
+              value={account.offerId ?? ''}
+              onChange={(e) =>
+                run(() =>
+                  api(`/accounts/${id}`, {
+                    method: 'PATCH',
+                    body: { offerId: e.target.value || null },
+                  }),
+                )
+              }
+            >
+              <option value="">Best fit (none)</option>
+              {offers.all.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {offerLabel(o)}
+                </option>
+              ))}
+            </NativeSelect>
+          </label>
+        ) : null}
+      </div>
       {account.scoreReasons?.fit?.length && account.fitScore != null ? (
         <ul className="flex flex-col gap-1 text-sm">
           {account.scoreReasons.fit.map((r, i) => (

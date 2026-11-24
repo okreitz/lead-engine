@@ -51,6 +51,7 @@ export interface InboxQuery {
   tab: InboxTab;
   source?: ThreadSource[] | undefined;
   minIntent?: number | undefined;
+  offer?: string | undefined;
   limit?: number;
 }
 
@@ -73,6 +74,8 @@ export function listInbox(tx: Tx, workspaceId: string, q: InboxQuery, now: numbe
   const conds: SQL[] = [eq(threads.workspaceId, workspaceId), tabWhere(q.tab, now)];
   if (q.source?.length) conds.push(inArray(threads.source, q.source));
   if (q.minIntent !== undefined) conds.push(gte(threads.intent, q.minIntent));
+  if (q.offer)
+    conds.push(q.offer === 'none' ? isNull(threads.offerId) : eq(threads.offerId, q.offer));
   const rows = tx
     .select()
     .from(threads)
@@ -142,6 +145,7 @@ export function threadView(tx: Tx, t: ThreadRow, now: number) {
     postedAt: t.postedAt,
     matchedPhrase: t.matchedPhrase,
     phraseKind: t.phraseKind,
+    offerId: t.offerId,
     scoreStatus: t.scoreStatus,
     intent: t.intent,
     label: t.label,
@@ -204,7 +208,14 @@ export function updateThread(tx: Tx, t: ThreadRow, u: ThreadUpdate, now: number)
 export function createAccountFromThread(tx: Tx, t: ThreadRow, now: number) {
   const e = accountEligibility(tx, t);
   if (!e.allowed || !e.company) throw new CrmError('not_allowed', e.reason ?? 'not allowed', 409);
-  const acc = createAccountForCompany(tx, t.workspaceId, e.company.id, 'conversations', now);
+  const acc = createAccountForCompany(
+    tx,
+    t.workspaceId,
+    e.company.id,
+    'conversations',
+    now,
+    t.offerId,
+  );
   tx.insert(signals)
     .values({
       id: newId('sig'),

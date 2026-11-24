@@ -8,8 +8,9 @@ import { WaitReason } from '@/components/blocks/key-help';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogClose, DialogContent } from '@/components/ui/dialog';
-import { Input, Label } from '@/components/ui/input';
+import { Input, Label, NativeSelect } from '@/components/ui/input';
 import { api, ApiError, errorMessage, fmtDate } from '@/lib/api';
+import { offerLabel, useOffers } from '@/lib/offers';
 
 interface Filters {
   industries: string[];
@@ -58,6 +59,7 @@ interface Run {
   techNote: string | null;
   error: string | null;
   createdAt: number;
+  offerName: string | null;
   finishedAt: number | null;
   job: { state: string; waitReason: string | null; lastError: string | null } | null;
 }
@@ -130,11 +132,16 @@ function NewRun({ onStarted }: { onStarted: (id: string) => void }) {
   const [tech, setTech] = useState(true);
   const [people, setPeople] = useState(false);
   const [open, setOpen] = useState(false);
-  const body = { limit, filters: overrides, tech, people };
+  const offers = useOffers();
+  const [picked, setPicked] = useState<string | null>(null);
+  // Several approved offers: the run is for one of them (its ICP fills the filters).
+  const offerId = offers.approved.length > 1 ? (picked ?? offers.approved[0]!.id) : null;
+  const body = { limit, filters: overrides, tech, people, ...(offerId ? { offerId } : {}) };
   const est = useQuery({
     queryKey: ['persona-estimate', body],
     queryFn: () => api<Estimate>('/persona/estimate', { method: 'POST', body }),
     retry: false,
+    enabled: offers.query.isSuccess,
   });
   const start = useMutation({
     mutationFn: () => api<{ id: string }>('/persona/runs', { method: 'POST', body }),
@@ -157,7 +164,30 @@ function NewRun({ onStarted }: { onStarted: (id: string) => void }) {
   const f = est.data?.filters;
   return (
     <Card>
-      <CardTitle>Search the company universe</CardTitle>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <CardTitle>Search the company universe</CardTitle>
+        {offerId ? (
+          <Label className="flex-row items-center gap-2">
+            For offer
+            <NativeSelect
+              aria-label="Offer to find companies for"
+              className="w-auto"
+              value={offerId}
+              onChange={(e) => {
+                setPicked(e.target.value);
+                // The new offer's ICP fills the filters again.
+                setOverrides({});
+              }}
+            >
+              {offers.approved.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {offerLabel(o)}
+                </option>
+              ))}
+            </NativeSelect>
+          </Label>
+        ) : null}
+      </div>
       {f ? (
         <form
           key={JSON.stringify(f)}
@@ -320,6 +350,7 @@ function NewRun({ onStarted }: { onStarted: (id: string) => void }) {
 const ACTIVE = ['queued', 'running'];
 
 function Runs({ selected, onSelect }: { selected: string | null; onSelect: (id: string) => void }) {
+  const offers = useOffers();
   const runs = useQuery({
     queryKey: ['persona-runs'],
     queryFn: () => api<Run[]>('/persona/runs'),
@@ -338,6 +369,9 @@ function Runs({ selected, onSelect }: { selected: string | null; onSelect: (id: 
               className={`flex w-full flex-wrap items-center gap-3 py-2 text-left ${selected === r.id ? 'font-medium' : ''}`}
             >
               <span>{fmtDate(r.createdAt)}</span>
+              {offers.multiple && r.offerName ? (
+                <span className="text-muted-foreground">{r.offerName}</span>
+              ) : null}
               <RunState run={r} />
               <progress
                 className="h-2 w-40"

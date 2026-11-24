@@ -10,6 +10,7 @@ export interface AccountRow {
   intentScore: number;
   priority: number;
   firstSource: string;
+  offerId: string | null;
   status: string;
   updatedAt: number;
   createdAt: number;
@@ -90,6 +91,7 @@ export interface AccountDetail {
     scoredAt: number | null;
     firstSource: string;
     firstSourceAt: number;
+    offerId: string | null;
     status: string;
   };
   company: {

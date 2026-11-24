@@ -7,8 +7,9 @@ import { EmptyState, SkeletonRows } from '@/components/blocks/empty-state';
 import { ConfirmButton } from '@/components/confirm';
 import { Button } from '@/components/ui/button';
 import { Badge, Card, CardTitle } from '@/components/ui/card';
-import { Input, Label, Textarea } from '@/components/ui/input';
+import { Input, Label, NativeSelect, Textarea } from '@/components/ui/input';
 import { api, errorMessage, fmtDate } from '@/lib/api';
+import { offerLabel, useOffers } from '@/lib/offers';
 import { fetchSites, type CollectorStatus, type IntentPage, type Site } from '@/lib/visitors';
 
 /** Settings → Sites & snippet (docs/ui.md §3.9): domain, snippet, install check, intent pages. */
@@ -16,10 +17,21 @@ export function SitesSettings({ owner }: { owner: boolean }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['sites'], queryFn: fetchSites });
   const [domain, setDomain] = useState('');
+  const offers = useOffers();
+  // '' = the offer drafted from this domain (the engine picks it), 'none' = every offer.
+  const [offerChoice, setOfferChoice] = useState('');
   const add = useMutation({
-    mutationFn: (d: string) => api<Site>('/sites', { method: 'POST', body: { domain: d } }),
+    mutationFn: (d: string) =>
+      api<Site>('/sites', {
+        method: 'POST',
+        body: {
+          domain: d,
+          ...(offerChoice ? { offerId: offerChoice === 'none' ? null : offerChoice } : {}),
+        },
+      }),
     onSuccess: async () => {
       setDomain('');
+      setOfferChoice('');
       await qc.invalidateQueries({ queryKey: ['sites'] });
     },
   });
@@ -46,6 +58,24 @@ export function SitesSettings({ owner }: { owner: boolean }) {
                 autoComplete="off"
               />
             </Label>
+            {offers.multiple ? (
+              <Label>
+                <span>Offer</span>
+                <NativeSelect
+                  value={offerChoice}
+                  onChange={(e) => setOfferChoice(e.target.value)}
+                  className="w-48"
+                >
+                  <option value="">Match the domain</option>
+                  {offers.all.map((o) => (
+                    <option key={o.id} value={o.id}>
+                      {offerLabel(o)}
+                    </option>
+                  ))}
+                  <option value="none">Every offer</option>
+                </NativeSelect>
+              </Label>
+            ) : null}
             <Button type="submit" disabled={add.isPending || !domain.trim()}>
               Add site
             </Button>
@@ -117,7 +147,13 @@ function CollectorNotes({ status }: { status: CollectorStatus }) {
 
 function SiteCard({ site, owner }: { site: Site; owner: boolean }) {
   const qc = useQueryClient();
+  const offers = useOffers();
   const [copied, setCopied] = useState(false);
+  const setOffer = useMutation({
+    mutationFn: (offerId: string | null) =>
+      api<Site>(`/sites/${site.id}`, { method: 'PATCH', body: { offerId } }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['sites'] }),
+  });
   const check = useMutation({
     mutationFn: () => api<Site>(`/sites/${site.id}/check`, { method: 'POST' }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['sites'] }),
@@ -131,6 +167,28 @@ function SiteCard({ site, owner }: { site: Site; owner: boolean }) {
           <p className="text-muted-foreground text-xs">
             Site key <span className="font-mono">{site.siteKey}</span>
           </p>
+          {offers.multiple ? (
+            <label className="text-muted-foreground mt-1 flex items-center gap-1.5 text-xs">
+              Visitors count for
+              <NativeSelect
+                aria-label={`Offer for ${site.domain}`}
+                className="h-7 w-auto py-0 text-xs"
+                value={site.offerId ?? ''}
+                disabled={!owner || setOffer.isPending}
+                onChange={(e) => setOffer.mutate(e.target.value || null)}
+              >
+                <option value="">Every offer (best fit)</option>
+                {offers.all.map((o) => (
+                  <option key={o.id} value={o.id}>
+                    {offerLabel(o)}
+                  </option>
+                ))}
+              </NativeSelect>
+            </label>
+          ) : null}
+          {setOffer.error ? (
+            <p className="text-destructive text-xs">{errorMessage(setOffer.error)}</p>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           {site.receiving ? (

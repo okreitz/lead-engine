@@ -246,7 +246,7 @@ export class VisitPipeline {
     let accountId = seen?.accountId;
     const outcome = ctx.db.transaction((tx): VisitOutcome => {
       if (!accountId) {
-        const acc = accountForMatch(tx, workspaceId, match, now);
+        const acc = accountForMatch(tx, workspaceId, match, now, ev.site.offerId);
         if (acc.status !== 'ok') return acc.status === 'not_us' ? 'non_us' : 'unmatched';
         accountId = acc.accountId;
         created = acc.created;
@@ -315,6 +315,7 @@ export class VisitPipeline {
         workspaceId,
         { domain, companyName, source: 'form', confidence: row.confidence, ipCompanyId: row.id },
         now,
+        ev.site.offerId,
       );
       if (acc.status !== 'ok') return false;
       accountId = acc.accountId;
